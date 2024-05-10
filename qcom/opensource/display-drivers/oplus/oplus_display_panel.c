@@ -23,6 +23,8 @@
 #include "oplus_onscreenfingerprint.h"
 #endif /* OPLUS_FEATURE_DISPLAY_ONSCREENFINGERPRINT */
 
+#include "oplus_display_panel_cabc.h"
+
 struct oplus_apollo_backlight_list *p_apollo_backlight = NULL;
 static int oplus_display_set_apollo_backlight_value(void *data);
 
@@ -351,8 +353,11 @@ long panel_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 
 	ksize = max(max(in_size, out_size), drv_size);
 
-	if (!strcmp(ioctl->name, "PANEL_IOCTL_GET_OPLUS_BRIGHTNESS")) {
-		LCD_DEBUG_BACKLIGHT("pid = %d, cmd = %s\n",
+	if (!strcmp(ioctl->name, "PANEL_IOCTL_GET_OPLUS_BRIGHTNESS")
+			|| !strcmp(ioctl->name, "PANEL_IOCTL_GET_DIM_ALPHA")
+			|| !strcmp(ioctl->name, "PANEL_IOCTL_GET_DIM_DC_ALPHA")
+			|| !strcmp(ioctl->name, "PANEL_IOCTL_GET_CABC_STATUS")) {
+		LCD_DEBUG("pid = %d, cmd = %s\n",
 				task_pid_nr(current), ioctl->name);
 	} else {
 		LCD_INFO("pid = %d, cmd = %s\n",

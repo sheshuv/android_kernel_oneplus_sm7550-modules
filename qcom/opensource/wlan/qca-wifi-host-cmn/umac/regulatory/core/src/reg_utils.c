@@ -556,6 +556,7 @@ reg_get_best_6g_power_type(struct wlan_objmgr_psoc *psoc,
 {
 	return QDF_STATUS_SUCCESS;
 }
+
 #endif
 #endif
 

@@ -624,6 +624,7 @@ int sde_encoder_helper_wait_event_timeout(
 
 /*
  * sde_encoder_get_fps - get the allowed panel jitter in nanoseconds
+
  * @frame_rate: custom input frame rate
  * @jitter_num: jitter numerator value
  * @jitter_denom: jitter denomerator value,

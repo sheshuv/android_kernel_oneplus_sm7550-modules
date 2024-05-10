@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2012-2015, 2020-2021 The Linux Foundation. All rights reserved.
- * Copyright (c) 2021-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -477,10 +477,7 @@ static void cm_update_vdev_mlme_macaddr(struct cnx_mgr *cm_ctx,
 	mac = (struct qdf_mac_addr *)wlan_vdev_mlme_get_mldaddr(cm_ctx->vdev);
 
 	if (req->cur_candidate->entry->ie_list.multi_link_bv &&
-	    !qdf_is_macaddr_zero(mac) &&
-	    wlan_cm_is_eht_allowed_for_current_security(
-					wlan_vdev_get_psoc(cm_ctx->vdev),
-					req->cur_candidate->entry)) {
+	    !qdf_is_macaddr_zero(mac)) {
 		wlan_vdev_obj_lock(cm_ctx->vdev);
 		/* Use link address for ML connection */
 		wlan_vdev_mlme_set_macaddr(cm_ctx->vdev,
@@ -553,6 +550,7 @@ cm_candidate_mlo_update(struct scan_cache_entry *scan_entry,
 			struct validate_bss_data *validate_bss_info)
 {
 	validate_bss_info->is_mlo = !!scan_entry->ie_list.multi_link_bv;
+	validate_bss_info->scan_entry = scan_entry;
 }
 #else
 static inline
@@ -602,10 +600,7 @@ static void cm_create_bss_peer(struct cnx_mgr *cm_ctx,
 
 	wlan_psoc_mlme_get_11be_capab(wlan_vdev_get_psoc(cm_ctx->vdev),
 				      &eht_capab);
-	if (eht_capab && wlan_vdev_mlme_is_mlo_vdev(cm_ctx->vdev) &&
-	    wlan_cm_is_eht_allowed_for_current_security(
-					wlan_vdev_get_psoc(cm_ctx->vdev),
-					req->cur_candidate->entry)) {
+	if (eht_capab && wlan_vdev_mlme_is_mlo_vdev(cm_ctx->vdev)) {
 		cm_set_vdev_link_id(cm_ctx, req);
 		wlan_mlo_init_cu_bpcc(cm_ctx->vdev);
 		mld_mac = cm_get_bss_peer_mld_addr(req);
@@ -663,7 +658,6 @@ QDF_STATUS cm_if_mgr_validate_candidate(struct cnx_mgr *cm_ctx,
 	event_data.validate_bss_info.beacon_interval = scan_entry->bcn_int;
 	qdf_copy_macaddr(&event_data.validate_bss_info.peer_addr,
 			 &scan_entry->bssid);
-	event_data.validate_bss_info.scan_entry = scan_entry;
 	cm_candidate_mlo_update(scan_entry, &event_data.validate_bss_info);
 
 	status = cm_t2lm_validate_candidate(cm_ctx, scan_entry);

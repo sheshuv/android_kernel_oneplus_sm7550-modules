@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #undef TRACE_SYSTEM
@@ -49,9 +49,7 @@ TRACE_EVENT(
 /* This part must be outside protection */
 #undef TRACE_INCLUDE_PATH
 #ifdef CONFIG_IPA_VENDOR_DLKM
-#define TRACE_INCLUDE_PATH ../../../../sm8550-modules/qcom/opensource/dataipa/drivers/platform/msm/gsi
-#elif CONFIG_KALAMA_IPA_LE
-#define TRACE_INCLUDE_PATH ../gsi
+#define TRACE_INCLUDE_PATH ../../../../vendor/qcom/opensource/dataipa/drivers/platform/msm/gsi
 #else
 #define TRACE_INCLUDE_PATH ../../techpack/dataipa/drivers/platform/msm/gsi
 #endif

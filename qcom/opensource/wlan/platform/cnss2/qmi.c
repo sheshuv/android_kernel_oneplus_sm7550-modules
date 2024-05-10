@@ -1,22 +1,22 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2015-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2021-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/module.h>
 #include <linux/soc/qcom/qmi.h>
-
-#ifdef OPLUS_FEATURE_WIFI_BDF
-//Modify for: multi projects using different bdf
-#include <soc/oplus/system/oplus_project.h>
-#endif /* OPLUS_FEATURE_WIFI_BDF */
 
 #include "bus.h"
 #include "debug.h"
 #include "main.h"
 #include "qmi.h"
 #include "genl.h"
+
+#ifdef OPLUS_FEATURE_WIFI_BDF
+//Modify for: multi projects using different bdf
+#include <soc/oplus/system/oplus_project.h>
+#endif /* OPLUS_FEATURE_WIFI_BDF */
 
 #define WLFW_SERVICE_INS_ID_V01		1
 #define WLFW_CLIENT_ID			0x4b4e454c
@@ -35,19 +35,33 @@
 
 #ifdef OPLUS_FEATURE_WIFI_BDF
 //Modify for: multi projects using different bdf
+/*8550 common define*/
 #define BDF_FILE_IN		"bdwlan.b0i"
 #define BDF_FILE_EU		"bdwlan.b0e"
 #define BDF_FILE_NA		"bdwlan.b0a"
+#define BDF_FILE_IN_EU		"bdwlan.b0ie"
 #define BDF_FILE_IN_GF		"bdwlang.b0i"
 #define BDF_FILE_EU_GF		"bdwlang.b0e"
 #define BDF_FILE_NA_GF		"bdwlang.b0a"
 #define BDF_FILE_SEC            "bdwlansec.elf"
 #define BDF_FILE_SEC_GF         "bdwlangsec.elf"
+
+/*salami 22861 regin_id define*/
 #define REG_ID_IN		21
 #define REG_ID_EU		22
 #define REG_ID_NA		23
+/*salami 22811 wifisar hw_id define*/
 #define HW_ID_MP1               48
+
+/*Aston 23861 define*/
+#define ASTON_RF_ID_IN_EU	1
+#define ASTON_RF_ID_NA		2
+
 #endif /* OPLUS_FEATURE_WIFI_BDF */
+
+#define CONN_ROAM_FILE_NAME		"wlan-connection-roaming"
+#define INI_EXT			".ini"
+#define INI_FILE_NAME_LEN		100
 
 #define QDSS_TRACE_CONFIG_FILE		"qdss_trace_config"
 /*
@@ -78,10 +92,6 @@
 
 #define QMI_WLFW_MAC_READY_TIMEOUT_MS	50
 #define QMI_WLFW_MAC_READY_MAX_RETRY	200
-
-// these error values are not defined in <linux/soc/qcom/qmi.h> and fw is sending as error response
-#define QMI_ERR_HARDWARE_RESTRICTED_V01		0x0053
-#define QMI_ERR_ENOMEM_V01		0x0002
 
 enum nm_modem_bit {
 	SLEEP_CLOCK_SELECT_INTERNAL_BIT = BIT(1),
@@ -695,36 +705,22 @@ out:
 	return ret;
 }
 
-static char *cnss_bdf_type_to_str(enum cnss_bdf_type bdf_type)
-{
-	switch (bdf_type) {
-	case CNSS_BDF_BIN:
-	case CNSS_BDF_ELF:
-		return "BDF";
-	case CNSS_BDF_REGDB:
-		return "REGDB";
-	case CNSS_BDF_HDS:
-		return "HDS";
-	default:
-		return "UNKNOWN";
-	}
-}
-
 #ifdef OPLUS_FEATURE_WIFI_BDF
 //Modify for: multi projects using different bdf
-static bool is_prj_support_region_id(void) {
+static bool is_prj_support_region_id() {
 	int project_id = get_project();
 	cnss_pr_dbg("the project support region id is: %d\n", project_id);
 	if (project_id == 22861 ||
 		project_id == 22862 ||
 		project_id == 22863 ||
-		project_id == 22864) {
+		project_id == 22864 ||
+		project_id == 23861) {
 		return true;
 	}
 	return false;
 }
 
-static bool is_prj_support_second_bdf(void) {
+static bool is_prj_support_second_bdf() {
 	int project_id = get_project();
 	cnss_pr_dbg("the project support second bdf is: %d\n", project_id);
 	if (project_id == 22811) {
@@ -737,7 +733,8 @@ static bool is_prj_support_second_bdf(void) {
 static void cnss_get_oplus_bdf_file_name(struct cnss_plat_data *plat_priv, char* file_name, u32 filename_len) {
 	int reg_id = get_Operator_Version();
 	int hw_id = get_PCB_Version();
-	cnss_pr_dbg("region id: %d pcb version: %d\n", reg_id, hw_id);
+	int rf_id = get_Modem_Version();
+	cnss_pr_info("region id: %d pcb version: %d rf_id: %d\n", reg_id, hw_id, rf_id);
 
 	if (plat_priv->chip_info.chip_id & CHIP_ID_GF_MASK) {
 		if (is_prj_support_region_id()) {
@@ -765,8 +762,10 @@ static void cnss_get_oplus_bdf_file_name(struct cnss_plat_data *plat_priv, char*
 				snprintf(file_name, filename_len, BDF_FILE_IN);
 			} else if (reg_id == REG_ID_EU) {
 				snprintf(file_name, filename_len, BDF_FILE_EU);
-			} else if (reg_id == REG_ID_NA) {
+			} else if (reg_id == REG_ID_NA || rf_id == ASTON_RF_ID_NA) {
 				snprintf(file_name, filename_len, BDF_FILE_NA);
+			} else if (rf_id == ASTON_RF_ID_IN_EU) {
+				snprintf(file_name, filename_len, BDF_FILE_IN_EU);
 			} else {
 				snprintf(file_name, filename_len, ELF_BDF_FILE_NAME);
 			}
@@ -782,6 +781,21 @@ static void cnss_get_oplus_bdf_file_name(struct cnss_plat_data *plat_priv, char*
 	}
 }
 #endif /* OPLUS_FEATURE_WIFI_BDF */
+
+static char *cnss_bdf_type_to_str(enum cnss_bdf_type bdf_type)
+{
+	switch (bdf_type) {
+	case CNSS_BDF_BIN:
+	case CNSS_BDF_ELF:
+		return "BDF";
+	case CNSS_BDF_REGDB:
+		return "REGDB";
+	case CNSS_BDF_HDS:
+		return "HDS";
+	default:
+		return "UNKNOWN";
+	}
+}
 
 static int cnss_get_bdf_file_name(struct cnss_plat_data *plat_priv,
 				  u32 bdf_type, char *filename,
@@ -864,6 +878,148 @@ static int cnss_get_bdf_file_name(struct cnss_plat_data *plat_priv,
 	return ret;
 }
 
+int cnss_wlfw_ini_file_send_sync(struct cnss_plat_data *plat_priv,
+				 enum wlfw_ini_file_type_v01 file_type)
+{
+	struct wlfw_ini_file_download_req_msg_v01 *req;
+	struct wlfw_ini_file_download_resp_msg_v01 *resp;
+	struct qmi_txn txn;
+	int ret = 0;
+	const struct firmware *fw;
+	char filename[INI_FILE_NAME_LEN] = {0};
+	char tmp_filename[INI_FILE_NAME_LEN] = {0};
+	const u8 *temp;
+	unsigned int remaining;
+	bool backup_supported = false;
+
+	cnss_pr_dbg("Sending QMI_WLFW_INI_FILE_DOWNLOAD_REQ_V01 message for ini_type: %d, state: 0x%lx\n",
+		    file_type, plat_priv->driver_state);
+
+	req = kzalloc(sizeof(*req), GFP_KERNEL);
+	if (!req)
+		return -ENOMEM;
+
+	resp = kzalloc(sizeof(*resp), GFP_KERNEL);
+	if (!resp) {
+		kfree(req);
+		return -ENOMEM;
+	}
+
+	switch (file_type) {
+	case WLFW_CONN_ROAM_INI_V01:
+		snprintf(tmp_filename, sizeof(tmp_filename),
+			 CONN_ROAM_FILE_NAME);
+		backup_supported = true;
+		break;
+	default:
+		cnss_pr_err("Invalid file type: %u\n", file_type);
+		ret = -EINVAL;
+		goto err_req_fw;
+	}
+
+	snprintf(filename, sizeof(filename), "%s%s", tmp_filename, INI_EXT);
+
+	cnss_pr_dbg("Invoke firmware_request_nowarn for %s\n", filename);
+	/* Fetch the file */
+	ret = firmware_request_nowarn(&fw, filename, &plat_priv->plat_dev->dev);
+	if (ret) {
+		cnss_pr_dbg("Failed to read %s, ret: %d\n", filename, ret);
+		if (!backup_supported)
+			goto err_req_fw;
+
+		snprintf(filename, sizeof(filename),
+			 "%s-%s%s", tmp_filename, "backup", INI_EXT);
+
+		cnss_pr_dbg("Invoke firmware_request_nowarn for %s\n",
+			    filename);
+		ret = firmware_request_nowarn(&fw, filename,
+					      &plat_priv->plat_dev->dev);
+		if (ret) {
+			cnss_pr_dbg("Failed to read %s, ret: %d\n", filename,
+				    ret);
+			goto err_req_fw;
+		}
+	}
+
+	temp = fw->data;
+	remaining = fw->size;
+
+	cnss_pr_dbg("Downloading INI file: %s, size: %u\n", filename,
+		    remaining);
+
+	while (remaining) {
+		req->file_type_valid = 1;
+		req->file_type = file_type;
+		req->total_size_valid = 1;
+		req->total_size = remaining;
+		req->seg_id_valid = 1;
+		req->data_valid = 1;
+		req->end_valid = 1;
+
+		if (remaining > QMI_WLFW_MAX_DATA_SIZE_V01) {
+			req->data_len = QMI_WLFW_MAX_DATA_SIZE_V01;
+		} else {
+			req->data_len = remaining;
+			req->end = 1;
+		}
+
+		memcpy(req->data, temp, req->data_len);
+
+		ret = qmi_txn_init(&plat_priv->qmi_wlfw, &txn,
+				   wlfw_ini_file_download_resp_msg_v01_ei,
+				   resp);
+		if (ret < 0) {
+			cnss_pr_err("Failed to initialize txn for INI file download request, err: %d\n",
+				    ret);
+			goto err;
+		}
+
+		ret = qmi_send_request
+			(&plat_priv->qmi_wlfw, NULL, &txn,
+			 QMI_WLFW_INI_FILE_DOWNLOAD_REQ_V01,
+			 WLFW_INI_FILE_DOWNLOAD_REQ_MSG_V01_MAX_MSG_LEN,
+			 wlfw_ini_file_download_req_msg_v01_ei, req);
+		if (ret < 0) {
+			qmi_txn_cancel(&txn);
+			cnss_pr_err("Failed to send INI File download request, err: %d\n",
+				    ret);
+			goto err;
+		}
+
+		ret = qmi_txn_wait(&txn, QMI_WLFW_TIMEOUT_JF);
+		if (ret < 0) {
+			cnss_pr_err("Failed to wait for response of INI File download request, err: %d\n",
+				    ret);
+			goto err;
+		}
+
+		if (resp->resp.result != QMI_RESULT_SUCCESS_V01) {
+			cnss_pr_err("INI file download request failed, result: %d, err: %d\n",
+				    resp->resp.result, resp->resp.error);
+			ret = -resp->resp.result;
+			goto err;
+		}
+
+		remaining -= req->data_len;
+		temp += req->data_len;
+		req->seg_id++;
+	}
+
+	release_firmware(fw);
+
+	kfree(req);
+	kfree(resp);
+	return 0;
+
+err:
+	release_firmware(fw);
+err_req_fw:
+	kfree(req);
+	kfree(resp);
+
+	return ret;
+}
+
 int cnss_wlfw_bdf_dnld_send_sync(struct cnss_plat_data *plat_priv,
 				 u32 bdf_type)
 {
@@ -911,8 +1067,19 @@ int cnss_wlfw_bdf_dnld_send_sync(struct cnss_plat_data *plat_priv,
 	temp = fw_entry->data;
 	remaining = fw_entry->size;
 
+	#ifdef OPLUS_FEATURE_WIFI_DCS_SWITCH
+	//Add for wifi switch monitor
+	if (bdf_type == CNSS_BDF_REGDB) {
+		set_bit(CNSS_LOAD_REGDB_SUCCESS, &plat_priv->loadRegdbState);
+	} else if (bdf_type == CNSS_BDF_ELF){
+		set_bit(CNSS_LOAD_BDF_SUCCESS, &plat_priv->loadBdfState);
+	}
+	cnss_pr_info("Downloading %s: %s, size: %u\n",
+		    cnss_bdf_type_to_str(bdf_type), filename, remaining);
+	#else
 	cnss_pr_dbg("Downloading %s: %s, size: %u\n",
 		    cnss_bdf_type_to_str(bdf_type), filename, remaining);
+	#endif /* OPLUS_FEATURE_WIFI_DCS_SWITCH */
 
 	while (remaining) {
 		req->valid = 1;
@@ -995,6 +1162,14 @@ int cnss_wlfw_bdf_dnld_send_sync(struct cnss_plat_data *plat_priv,
 err_send:
 	release_firmware(fw_entry);
 err_req_fw:
+	#ifdef OPLUS_FEATURE_WIFI_DCS_SWITCH
+	//Add for wifi switch monitor
+	if (bdf_type == CNSS_BDF_REGDB) {
+		set_bit(CNSS_LOAD_REGDB_FAIL, &plat_priv->loadRegdbState);
+	} else if (bdf_type == CNSS_BDF_ELF){
+		set_bit(CNSS_LOAD_BDF_FAIL, &plat_priv->loadBdfState);
+	}
+	#endif /* OPLUS_FEATURE_WIFI_DCS_SWITCH */
 	if (!(bdf_type == CNSS_BDF_REGDB ||
 	      test_bit(CNSS_IN_REBOOT, &plat_priv->driver_state) ||
 	      ret == -EAGAIN))
@@ -1080,108 +1255,6 @@ int cnss_wlfw_tme_patch_dnld_send_sync(struct cnss_plat_data *plat_priv,
 	return 0;
 
 out:
-	kfree(req);
-	kfree(resp);
-	return ret;
-}
-
-int cnss_wlfw_tme_opt_file_dnld_send_sync(struct cnss_plat_data *plat_priv,
-				       enum wlfw_tme_lite_file_type_v01 file)
-{
-	struct wlfw_tme_lite_info_req_msg_v01 *req;
-	struct wlfw_tme_lite_info_resp_msg_v01 *resp;
-	struct qmi_txn txn;
-	struct cnss_fw_mem *tme_opt_file_mem = NULL;
-	char *file_name = NULL;
-	int ret = 0;
-
-	if (plat_priv->device_id != PEACH_DEVICE_ID)
-		return 0;
-
-	cnss_pr_dbg("Sending TME opt file information message, state: 0x%lx\n",
-		    plat_priv->driver_state);
-
-	req = kzalloc(sizeof(*req), GFP_KERNEL);
-	if (!req)
-		return -ENOMEM;
-
-	resp = kzalloc(sizeof(*resp), GFP_KERNEL);
-	if (!resp) {
-		kfree(req);
-		return -ENOMEM;
-	}
-
-	if (file == WLFW_TME_LITE_OEM_FUSE_FILE_V01) {
-		tme_opt_file_mem = &plat_priv->tme_opt_file_mem[0];
-		file_name = TME_OEM_FUSE_FILE_NAME;
-	} else if (file == WLFW_TME_LITE_RPR_FILE_V01) {
-		tme_opt_file_mem = &plat_priv->tme_opt_file_mem[1];
-		file_name = TME_RPR_FILE_NAME;
-	} else if (file == WLFW_TME_LITE_DPR_FILE_V01) {
-		tme_opt_file_mem = &plat_priv->tme_opt_file_mem[2];
-		file_name = TME_DPR_FILE_NAME;
-	}
-
-	if (!tme_opt_file_mem || !tme_opt_file_mem->pa ||
-	    !tme_opt_file_mem->size) {
-		cnss_pr_err("Memory for TME opt file is not available\n");
-		ret = -ENOMEM;
-		goto out;
-	}
-
-	cnss_pr_dbg("TME opt file %s memory, va: 0x%pK, pa: %pa, size: 0x%zx\n",
-		    file_name, tme_opt_file_mem->va, &tme_opt_file_mem->pa, tme_opt_file_mem->size);
-
-	req->tme_file = file;
-	req->addr = tme_opt_file_mem->pa;
-	req->size = tme_opt_file_mem->size;
-
-	ret = qmi_txn_init(&plat_priv->qmi_wlfw, &txn,
-			   wlfw_tme_lite_info_resp_msg_v01_ei, resp);
-	if (ret < 0) {
-		cnss_pr_err("Failed to initialize txn for TME opt file information request, err: %d\n",
-			    ret);
-		goto out;
-	}
-
-	ret = qmi_send_request(&plat_priv->qmi_wlfw, NULL, &txn,
-			       QMI_WLFW_TME_LITE_INFO_REQ_V01,
-			       WLFW_TME_LITE_INFO_REQ_MSG_V01_MAX_MSG_LEN,
-			       wlfw_tme_lite_info_req_msg_v01_ei, req);
-	if (ret < 0) {
-		qmi_txn_cancel(&txn);
-		cnss_pr_err("Failed to send TME opt file information request, err: %d\n",
-			    ret);
-		goto out;
-	}
-
-	ret = qmi_txn_wait(&txn, QMI_WLFW_TIMEOUT_JF);
-	if (ret < 0) {
-		cnss_pr_err("Failed to wait for response of TME opt file information request, err: %d\n",
-			    ret);
-		goto out;
-	}
-
-	if (resp->resp.result != QMI_RESULT_SUCCESS_V01) {
-		ret = -resp->resp.result;
-		if (resp->resp.error == QMI_ERR_HARDWARE_RESTRICTED_V01) {
-			cnss_pr_err("TME Power On failed\n");
-			goto out;
-		} else if (resp->resp.error == QMI_ERR_ENOMEM_V01) {
-			cnss_pr_err("malloc SRAM failed\n");
-			goto out;
-		}
-		cnss_pr_err("TME opt file information request failed, result: %d, err: %d\n",
-			    resp->resp.result, resp->resp.error);
-		goto out;
-	}
-
-	kfree(req);
-	kfree(resp);
-	return 0;
-
-out:
-	CNSS_QMI_ASSERT();
 	kfree(req);
 	kfree(resp);
 	return ret;
@@ -1348,6 +1421,10 @@ int cnss_wlfw_wlan_mac_req_send_sync(struct cnss_plat_data *plat_priv,
 	struct wlfw_mac_addr_resp_msg_v01 resp = {0};
 	struct qmi_txn txn;
 	int ret;
+#ifdef OPLUS_FEATURE_WIFI_MAC
+        int i;
+        char revert_mac[QMI_WLFW_MAC_ADDR_SIZE_V01];
+#endif /* OPLUS_FEATURE_WIFI_MAC */
 
 	if (!plat_priv || !mac || mac_len != QMI_WLFW_MAC_ADDR_SIZE_V01)
 		return -EINVAL;
@@ -1363,8 +1440,17 @@ int cnss_wlfw_wlan_mac_req_send_sync(struct cnss_plat_data *plat_priv,
 
 		cnss_pr_dbg("Sending WLAN mac req [%pM], state: 0x%lx\n",
 			    mac, plat_priv->driver_state);
-	memcpy(req.mac_addr, mac, mac_len);
-	req.mac_addr_valid = 1;
+#ifdef OPLUS_FEATURE_WIFI_MAC
+        for (i = 0; i < QMI_WLFW_MAC_ADDR_SIZE_V01 ; i ++){
+            revert_mac[i] = mac[QMI_WLFW_MAC_ADDR_SIZE_V01 - i -1];
+        }
+            cnss_pr_dbg("Sending revert WLAN mac req [%pM], state: 0x%lx\n",
+                            revert_mac, plat_priv->driver_state);
+        memcpy(req.mac_addr, revert_mac, mac_len);
+#else
+        memcpy(req.mac_addr, mac, mac_len);
+#endif /* OPLUS_FEATURE_WIFI_MAC */
+        req.mac_addr_valid = 1;
 
 	ret = qmi_send_request(&plat_priv->qmi_wlfw, NULL, &txn,
 			       QMI_WLFW_MAC_ADDR_REQ_V01,
@@ -4042,7 +4128,7 @@ int ims_subscribe_for_indication_send_async(struct cnss_plat_data *plat_priv)
 	(&plat_priv->ims_qmi, NULL, txn,
 	QMI_IMS_PRIVATE_SERVICE_SUBSCRIBE_FOR_INDICATIONS_REQ_V01,
 	IMS_PRIVATE_SERVICE_SUBSCRIBE_FOR_INDICATIONS_REQ_MSG_V01_MAX_MSG_LEN,
-	ims_private_service_subscribe_ind_req_msg_v01_ei, req);
+	ims_private_service_subscribe_for_indications_req_msg_v01_ei, req);
 	if (ret < 0) {
 		qmi_txn_cancel(txn);
 		cnss_pr_err("Fail to send ims subscribe for indication req %d\n",
@@ -4133,7 +4219,7 @@ static struct qmi_msg_handler qmi_ims_msg_handlers[] = {
 		.msg_id =
 		QMI_IMS_PRIVATE_SERVICE_SUBSCRIBE_FOR_INDICATIONS_REQ_V01,
 		.ei =
-		ims_private_service_subscribe_ind_rsp_msg_v01_ei,
+		ims_private_service_subscribe_for_indications_rsp_msg_v01_ei,
 		.decoded_size = sizeof(struct
 		ims_private_service_subscribe_for_indications_rsp_msg_v01),
 		.fn = ims_subscribe_for_indication_resp_cb

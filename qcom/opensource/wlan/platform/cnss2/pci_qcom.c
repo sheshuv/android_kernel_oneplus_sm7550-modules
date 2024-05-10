@@ -365,12 +365,6 @@ static int cnss_set_pci_link_status(struct cnss_pci_data *pci_priv,
 int cnss_set_pci_link(struct cnss_pci_data *pci_priv, bool link_up)
 {
 	int ret = 0, retry = 0;
-	struct cnss_plat_data *plat_priv;
-	int sw_ctrl_gpio;
-
-	plat_priv = pci_priv->plat_priv;
-	sw_ctrl_gpio = plat_priv->pinctrl_info.sw_ctrl_gpio;
-
 	#ifndef OPLUS_BUG_STABILITY
 	cnss_pr_vdbg("%s PCI link\n", link_up ? "Resuming" : "Suspending");
 	#endif /* OPLUS_BUG_STABILITY */
@@ -380,8 +374,6 @@ retry:
 		ret = cnss_pci_set_link_up(pci_priv);
 		if (ret && retry++ < LINK_TRAINING_RETRY_MAX_TIMES) {
 			cnss_pr_dbg("Retry PCI link training #%d\n", retry);
-			cnss_pr_dbg("Value of SW_CTRL GPIO: %d\n",
-				    cnss_get_input_gpio_value(plat_priv, sw_ctrl_gpio));
 			if (pci_priv->pci_link_down_ind)
 				msleep(LINK_TRAINING_RETRY_DELAY_MS * retry);
 			goto retry;
@@ -409,6 +401,10 @@ int cnss_pci_prevent_l1(struct device *dev)
 {
 	struct pci_dev *pci_dev = to_pci_dev(dev);
 	struct cnss_pci_data *pci_priv = cnss_get_pci_priv(pci_dev);
+	#ifdef OPLUS_FEATURE_WIFI_DCS_SWITCH
+	//Add for wifi switch monitor
+	struct cnss_plat_data *plat_priv = NULL;
+	#endif /* OPLUS_FEATURE_WIFI_DCS_SWITCH */
 	int ret;
 
 	if (!pci_priv) {
@@ -431,7 +427,19 @@ int cnss_pci_prevent_l1(struct device *dev)
 		cnss_pr_err("Failed to prevent PCIe L1, considered as link down\n");
 		cnss_pci_link_down(dev);
 	}
-
+	#ifdef OPLUS_FEATURE_WIFI_DCS_SWITCH
+	//Add for wifi switch monitor
+	plat_priv = pci_priv->plat_priv;
+	if (!plat_priv) {
+		cnss_pr_err("plat_priv is NULL\n");
+	} else {
+		if (ret == -EIO) {
+			set_bit(CNSS_PCIE_L1_FAIL,&plat_priv->pcieL1Fail);
+		} else {
+			clear_bit(CNSS_PCIE_L1_FAIL,&plat_priv->pcieL1Fail);
+		}
+	}
+	#endif /* OPLUS_FEATURE_WIFI_DCS_SWITCH */
 	return ret;
 }
 EXPORT_SYMBOL(cnss_pci_prevent_l1);

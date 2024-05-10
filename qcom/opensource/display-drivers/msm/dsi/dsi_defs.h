@@ -32,6 +32,30 @@
 #define DSI_DEBUG(fmt, ...)	DRM_DEV_DEBUG(NULL, "[msm-dsi-debug]: "fmt, \
 								##__VA_ARGS__)
 
+#ifdef OPLUS_FEATURE_DISPLAY
+#include <soc/oplus/system/oplus_mm_kevent_fb.h>
+#define DSI_MM_ERR(fmt, ...)	\
+	do { \
+			DRM_DEV_ERROR(NULL, "[msm-dsi-error]: " fmt, ##__VA_ARGS__); \
+			mm_fb_display_kevent_named(MM_FB_KEY_RATELIMIT_1H, fmt, ##__VA_ARGS__); \
+		} while(0)
+#define DSI_MM_WARN(fmt, ...)	\
+	do { \
+			DRM_WARN("[msm-dsi-warn]: " fmt, ##__VA_ARGS__); \
+			mm_fb_display_kevent_named(MM_FB_KEY_RATELIMIT_1H, fmt, ##__VA_ARGS__); \
+		} while(0)
+#define DSI_MM_INFO(fmt, ...)	\
+	do { \
+			DRM_DEV_INFO(NULL, "[msm-dsi-info]: " fmt, ##__VA_ARGS__); \
+			mm_fb_display_kevent_named(MM_FB_KEY_RATELIMIT_1H, fmt, ##__VA_ARGS__); \
+		} while(0)
+#define DSI_MM_DEBUG(fmt, ...)	\
+	do { \
+			DRM_DEV_DEBUG(NULL, "[msm-dsi-debug]: " fmt, ##__VA_ARGS__); \
+			mm_fb_display_kevent_named(MM_FB_KEY_RATELIMIT_1H, fmt, ##__VA_ARGS__); \
+		} while(0)
+#endif /* OPLUS_FEATURE_DISPLAY */
+
 /**
  * enum dsi_pixel_format - DSI pixel formats
  * @DSI_PIXEL_FORMAT_RGB565:
@@ -353,6 +377,10 @@ enum dsi_cmd_set_type {
 	DSI_CMD_HBM_ON,
 	DSI_CMD_HBM_ON_ONEPULSE,
 	DSI_CMD_HBM_OFF,
+	DSI_CMD_LHBM_PRESSED_ICON_GAMMA,
+	DSI_CMD_LHBM_PRESSED_ICON_GRAYSCALE,
+	DSI_CMD_LHBM_PRESSED_ICON_ON,
+	DSI_CMD_LHBM_PRESSED_ICON_OFF,
 	DSI_CMD_AOR_ON,
 	DSI_CMD_AOR_OFF,
 	DSI_CMD_AOD_HIGH_LIGHT_MODE,
@@ -383,8 +411,8 @@ enum dsi_cmd_set_type {
 	DSI_CMD_FFC_MODE2,
 	DSI_CMD_FFC_MODE3,
 	DSI_CMD_SET_PANEL_ID1,
-	DSI_CMD_READ_SAMSUNG_PANEL_REGISTER_ON,
-	DSI_CMD_READ_SAMSUNG_PANEL_REGISTER_OFF,
+	DSI_CMD_PANEL_READ_REGISTER_OPEN,
+	DSI_CMD_PANEL_READ_REGISTER_CLOSE,
 	DSI_CMD_LOADING_EFFECT_MODE1,
 	DSI_CMD_LOADING_EFFECT_MODE2,
 	DSI_CMD_LOADING_EFFECT_OFF,
@@ -445,6 +473,13 @@ enum dsi_cmd_set_type {
 	DSI_CMD_GAMMA_PRE_READ_90HZ,
 	DSI_CMD_GAMMA_PRE_READ_OFF,
 	DSI_CMD_GAMMA_RE_MAP,
+	DSI_CMD_SET_ON_DEMURA,
+	DSI_CMD_CABC_MODE1,
+	DSI_CMD_CABC_MODE2,
+	DSI_CMD_CABC_MODE3,
+	DSI_CMD_SWITCH_PAGE0,
+	DSI_CMD_BACKLIGHT_GAMMA_ENTER,
+	DSI_CMD_BACKLIGHT_GAMMA_EXIT,
 #endif /* OPLUS_FEATURE_DISPLAY */
 #if defined(CONFIG_PXLW_IRIS)
 	DSI_CMD_SET_IRIS_SWITCH_TSP_VSYNC_SCANLINE,
@@ -835,6 +870,7 @@ struct dsi_display_mode_priv_info {
 	u32 vsync_width;
 	u32 vsync_period;
 	u32 async_bl_delay;
+	u32 refresh_rate;
 #endif /* OPLUS_FEATURE_DISPLAY */
 #ifdef OPLUS_FEATURE_DISPLAY_ADFR
 	unsigned int *oplus_adfr_min_fps_mapping_table;

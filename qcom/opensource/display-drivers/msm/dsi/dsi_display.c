@@ -44,6 +44,10 @@
 #include "../oplus/oplus_display_temp_compensation.h"
 #endif /* OPLUS_FEATURE_DISPLAY_TEMP_COMPENSATION */
 
+#ifdef OPLUS_FEATURE_DISPLAY_ONSCREENFINGERPRINT
+#include "../oplus/oplus_onscreenfingerprint.h"
+#endif /* OPLUS_FEATURE_DISPLAY_ONSCREENFINGERPRINT */
+
 #if defined(CONFIG_PXLW_IRIS) || defined(CONFIG_PXLW_SOFT_IRIS)
 #include "dsi_iris_api.h"
 #endif
@@ -322,6 +326,14 @@ int dsi_display_set_backlight(struct drm_connector *connector,
 
 	DSI_DEBUG("bl_scale = %u, bl_scale_sv = %u, bl_lvl = %u\n",
 		bl_scale, bl_scale_sv, (u32)bl_temp);
+
+#ifdef OPLUS_BUG_STABILITY
+	if (panel->oplus_priv.gamma_switch_enable && !strcmp(panel->name,"AC166 P 3 A0013 video mode dsi panel")) {
+		rc = oplus_display_panel_switch_gamma_mode(panel, bl_lvl);
+		if (rc)
+			DSI_ERR("failed to switch gamma mode\n");
+	}
+#endif /* OPLUS_BUG_STABILITY */
 
 	rc = dsi_panel_set_backlight(panel, (u32)bl_temp);
 	if (rc)
@@ -912,8 +924,11 @@ static int dsi_display_read_status(struct dsi_display_ctrl *ctrl,
 	flags = DSI_CTRL_CMD_READ;
 
 	for (i = 0; i < count; ++i) {
-		memset(config->status_buf, 0x0, SZ_4K);
+#ifdef OPLUS_FEATURE_DISPLAY
+		oplus_panel_esd_set_page(panel, i);
+#endif /* OPLUS_FEATURE_DISPLAY */
 
+		memset(config->status_buf, 0x0, SZ_4K);
 		if (config->status_cmd.state == DSI_CMD_SET_STATE_LP)
 			cmds[i].msg.flags |= MIPI_DSI_MSG_USE_LPM;
 
@@ -957,6 +972,10 @@ static int dsi_display_read_status(struct dsi_display_ctrl *ctrl,
 #if defined(CONFIG_PXLW_IRIS)
 		}
 #endif
+
+#ifdef OPLUS_FEATURE_DISPLAY
+		oplus_panel_esd_set_page(panel, 0);
+#endif /* OPLUS_FEATURE_DISPLAY */
 	}
 
 #if defined(CONFIG_PXLW_IRIS)
@@ -9226,6 +9245,10 @@ int dsi_display_enable(struct dsi_display *display)
 		oplus_adfr_fakeframe_status_update(display->panel, true);
 		oplus_adfr_timing_mux_vsync_switch(display);
 #endif /* OPLUS_FEATURE_DISPLAY_ADFR */
+
+#ifdef OPLUS_FEATURE_DISPLAY
+		display->panel->ts_timestamp = ktime_get();
+#endif /* OPLUS_FEATURE_DISPLAY */
 		rc = dsi_panel_switch(display->panel);
 		if (rc)
 			DSI_ERR("[%s] failed to switch DSI panel mode, rc=%d\n",
@@ -9272,6 +9295,12 @@ error:
 		oplus_temp_compensation_data_update(display);
 	}
 #endif /* OPLUS_FEATURE_DISPLAY_TEMP_COMPENSATION */
+
+#ifdef OPLUS_FEATURE_DISPLAY_ONSCREENFINGERPRINT
+	if (display && oplus_ofp_is_supported()) {
+		oplus_ofp_lhbm_pressed_icon_gamma_update(display);
+	}
+#endif /* OPLUS_FEATURE_DISPLAY_ONSCREENFINGERPRINT */
 
 	SDE_EVT32(SDE_EVTLOG_FUNC_EXIT);
 	return rc;

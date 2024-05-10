@@ -22,6 +22,8 @@
 #include "venus_hfi_response.h"
 #include "msm_vidc.h"
 
+extern const char video_banner[];
+
 #define MSM_VIDC_DRV_NAME "msm_vidc_driver"
 #define MSM_VIDC_BUS_NAME "platform:msm_vidc_bus"
 
@@ -857,7 +859,7 @@ void *msm_vidc_open(void *vidc_core, u32 session_type)
 	struct msm_vidc_core *core;
 	int i = 0;
 
-	d_vpr_h("%s()\n", __func__);
+	d_vpr_h("%s: %s\n", __func__, video_banner);
 	core = vidc_core;
 	if (!core) {
 		d_vpr_e("%s: invalid params\n", __func__);
@@ -961,15 +963,14 @@ void *msm_vidc_open(void *vidc_core, u32 session_type)
 	for (i = 0; i < MAX_SIGNAL; i++)
 		init_completion(&inst->completions[i]);
 
-	INIT_DELAYED_WORK(&inst->stats_work, msm_vidc_stats_handler);
-	INIT_WORK(&inst->stability_work, msm_vidc_stability_handler);
-	INIT_DELAYED_WORK(&inst->decode_batch.work, msm_vidc_batch_handler);
-
 	inst->workq = create_singlethread_workqueue("workq");
 	if (!inst->workq) {
 		i_vpr_e(inst, "%s: create workq failed\n", __func__);
 		goto error;
 	}
+
+	INIT_DELAYED_WORK(&inst->stats_work, msm_vidc_stats_handler);
+	INIT_WORK(&inst->stability_work, msm_vidc_stability_handler);
 
 	rc = msm_vidc_vmem_alloc(sizeof(struct msm_vidc_inst_capability),
 		(void **)&inst->capabilities, "inst capability");

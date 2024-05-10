@@ -31,6 +31,7 @@
 #include "adreno_pm4types.h"
 #include "adreno_trace.h"
 #include "kgsl_bus.h"
+#include "kgsl_reclaim.h"
 #include "kgsl_trace.h"
 #include "kgsl_util.h"
 
@@ -1491,6 +1492,7 @@ static int adreno_pm_resume(struct device *dev)
 	ops->pm_resume(adreno_dev);
 	mutex_unlock(&device->mutex);
 
+	kgsl_reclaim_start();
 	return 0;
 }
 
@@ -1515,6 +1517,13 @@ static int adreno_pm_suspend(struct device *dev)
 	mutex_lock(&device->mutex);
 	status = ops->pm_suspend(adreno_dev);
 	mutex_unlock(&device->mutex);
+
+	if (status)
+		return status;
+
+	kgsl_reclaim_close();
+	kthread_flush_worker(device->events_worker);
+	flush_workqueue(kgsl_driver.lockless_workqueue);
 
 	return status;
 }

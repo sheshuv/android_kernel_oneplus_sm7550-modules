@@ -1118,6 +1118,7 @@ void mlo_sta_link_connect_notify(struct wlan_objmgr_vdev *vdev,
 {
 	struct wlan_mlo_dev_context *mlo_dev_ctx = vdev->mlo_dev_ctx;
 	struct wlan_mlo_sta *sta_ctx = NULL;
+	struct wlan_objmgr_vdev *assoc_vdev;
 
 	if (mlo_dev_ctx) {
 		sta_ctx = mlo_dev_ctx->sta_ctx;
@@ -1130,6 +1131,16 @@ void mlo_sta_link_connect_notify(struct wlan_objmgr_vdev *vdev,
 		mlo_debug("Handle pending disocnnect for vdev %d",
 			  wlan_vdev_get_id(vdev));
 		mlo_handle_pending_disconnect(vdev);
+		return;
+	}
+
+	assoc_vdev = mlo_get_assoc_link_vdev(vdev->mlo_dev_ctx);
+	if (assoc_vdev && QDF_IS_STATUS_SUCCESS(rsp->connect_status) &&
+	    !wlan_cm_is_vdev_connected(assoc_vdev)) {
+		mlo_debug("Handle pending disconnect for vdev %d",
+			  wlan_vdev_get_id(vdev));
+		if (assoc_vdev != vdev)
+			mlo_handle_pending_disconnect(vdev);
 		return;
 	}
 

@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only WITH Linux-syscall-note */
 /*
  * Copyright (c) 2019-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2024, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef __UAPI_CAM_TFE_H__
@@ -80,6 +80,9 @@
 #define CAM_ISP_TFE_GENERIC_BLOB_TYPE_ALIGNMENT_OFFSET_INFO   17
 #define CAM_ISP_TFE_GENERIC_BLOB_TYPE_UPDATE_OUT_RES          18
 #define CAM_ISP_TFE_GENERIC_BLOB_TYPE_DISCARD_INITIAL_FRAMES  19
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+#define CAM_ISP_TFE_GENERIC_BLOB_TYPE_UPDATE_EPOCH_FACTOR     20
+#endif
 
 /* DSP mode */
 #define CAM_ISP_TFE_DSP_MODE_NONE                   0
@@ -104,7 +107,6 @@
 #define CAM_ISP_TFE_FLAG_BAYER_BIN                       BIT(1)
 #define CAM_ISP_TFE_FLAG_SHDR_MASTER_EN                  BIT(2)
 #define CAM_ISP_TFE_FLAG_SHDR_SLAVE_EN                   BIT(3)
-#define CAM_ISP_TFE_FLAG_EPD_SUPPORT                     BIT(4)
 
 /* Query devices */
 /**

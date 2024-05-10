@@ -941,7 +941,7 @@ enum qca_nl80211_vendor_subcmds {
 	QCA_NL80211_VENDOR_SUBCMD_PASN = 215,
 	QCA_NL80211_VENDOR_SUBCMD_SECURE_RANGING_CONTEXT = 216,
 	QCA_NL80211_VENDOR_SUBCMD_COAP_OFFLOAD = 217,
-	QCA_NL80211_VENDOR_SUBCMD_SCS_RULE_CONFIG = 218,
+        QCA_NL80211_VENDOR_SUBCMD_SCS_RULE_CONFIG = 218,
 	QCA_NL80211_VENDOR_SUBCMD_GET_SAR_CAPABILITY = 219,
 	QCA_NL80211_VENDOR_SUBCMD_SR = 220,
 	QCA_NL80211_VENDOR_SUBCMD_MLO_PEER_PRIM_NETDEV_EVENT = 221,
@@ -951,7 +951,35 @@ enum qca_nl80211_vendor_subcmds {
 	QCA_NL80211_VENDOR_SUBCMD_MLO_LINK_STATE = 227,
 	QCA_NL80211_VENDOR_SUBCMD_CONNECTED_CHANNEL_STATS = 228,
 	QCA_NL80211_VENDOR_SUBCMD_LINK_RECONFIG = 230,
+	#ifdef OPLUS_BUG_STABILITY
+	// We need a common value to let this function work on dfferent QCOM plaftom
+	// which may have different SUBCMD defination, so assign a more large number for
+	// OPLUS command
+	OPLUS_NL80211_VENDOR_SUBCMD_MODIFY_ACL = 1001,
+	OPLUS_NL80211_VENDOR_SUBCMD_SET_MAX_ASSOC = 1002,
+	OPLUS_NL80211_VENDOR_SUBCMD_SET_WIFI_CONFIGURATION = 1003,
+	#endif /* OPLUS_BUG_STABILITY */
 };
+
+#ifdef OPLUS_BUG_STABILITY
+//add for: OPLUS specific attr
+enum oplus_vendor_attr {
+	OPLUS_WLAN_VENDOR_ATTR_UNSPECIFIC = 0, /* cannot be use due to nla_parse() */
+	OPLUS_WLAN_VENDOR_ATTR_MAC_ADDR,
+	OPLUS_WLAN_VENDOR_ATTR_WETHER_BLOCK_CLIENT,
+	OPLUS_WLAN_VENDOR_ATTR_SAP_MAX_CLIENT_NUM,
+
+	//OPLUS_WIFI_VENDOR_EDIT_START
+	//Add for ULL TX 20M
+	OPLUS_WLAN_VENDOR_ATTR_CONFIG_MAX_TX_BANDWIDTH,
+	//OPLUS_WIFI_VENDOR_EDIT_END
+
+	/* add attr above */
+	OPLUS_WLAN_VENDOR_ATTR_LAST,
+	OPLUS_WLAN_VENDOR_ATTR_MAX =
+	OPLUS_WLAN_VENDOR_ATTR_LAST - 1,
+};
+#endif /* OPLUS_BUG_STABILITY */
 
 enum qca_wlan_vendor_tos {
 	QCA_WLAN_VENDOR_TOS_BK = 0,
@@ -4864,10 +4892,7 @@ enum qca_wlan_vendor_attr_config {
 	/* 32-bit unsigned value to set reorder timeout for AC_BK */
 	QCA_WLAN_VENDOR_ATTR_CONFIG_RX_REORDER_TIMEOUT_BACKGROUND = 34,
 	/* 6-byte MAC address to point out the specific peer */
-	QCA_WLAN_VENDOR_ATTR_CONFIG_PEER_MAC = 35,
-	/* Backward compatibility with the original name */
-	QCA_WLAN_VENDOR_ATTR_CONFIG_RX_BLOCKSIZE_PEER_MAC =
-		QCA_WLAN_VENDOR_ATTR_CONFIG_PEER_MAC,
+	QCA_WLAN_VENDOR_ATTR_CONFIG_RX_BLOCKSIZE_PEER_MAC = 35,
 	/* 32-bit unsigned value to set window size for specific peer */
 	QCA_WLAN_VENDOR_ATTR_CONFIG_RX_BLOCKSIZE_WINLIMIT = 36,
 	/* 8-bit unsigned value to set the beacon miss threshold in 2.4 GHz */
@@ -5355,24 +5380,6 @@ enum qca_wlan_vendor_attr_config {
 	 * Uses enum qca_wlan_emlsr_mode values.
 	 */
 	QCA_WLAN_VENDOR_ATTR_CONFIG_EMLSR_MODE_SWITCH = 93,
-
-	/*
-	 * 16-bit unsigned value to configure TX max A-MPDU count.
-	 *
-	 * For STA interface, this attribute is applicable only in connected
-	 * state, peer MAC address is not required to be provided.
-	 *
-	 * For AP interface, this attribute is applicable only in started
-	 * state and one of the associated peer STAs must be specified with
-	 * QCA_WLAN_VENDOR_ATTR_CONFIG_PEER_MAC. If this is for an ML
-	 * association, the peer MAC address provided is the link address of
-	 * the non-AP MLD.
-	 *
-	 * This attribute runtime configures the TX maximum aggregation size.
-	 * The value must be in range of 1 to BA window size for the specific
-	 * peer.
-	 */
-	QCA_WLAN_VENDOR_ATTR_CONFIG_PEER_AMPDU_CNT = 103,
 
 	/* keep last */
 	QCA_WLAN_VENDOR_ATTR_CONFIG_AFTER_LAST,

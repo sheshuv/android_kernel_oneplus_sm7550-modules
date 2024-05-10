@@ -206,6 +206,7 @@ struct dsi_panel_oplus_privite {
 	bool pwm_switch_restore_support;
 	bool need_sync;
 	u32 disable_delay_bl_count;
+	bool gamma_switch_enable;
 };
 
 struct dsi_panel_oplus_serial_number {
@@ -215,6 +216,8 @@ struct dsi_panel_oplus_serial_number {
 	u32 serial_number_reg;
 	int serial_number_index;
 	int serial_number_conut;
+	bool is_multi_reg;
+	u32 *serial_number_multi_regs;
 };
 #endif /* OPLUS_FEATURE_DISPLAY */
 
@@ -424,11 +427,13 @@ struct dsi_panel {
 	/* for pwm disable duty worker*/
 	struct workqueue_struct *oplus_pwm_disable_duty_set_wq;
 	struct work_struct oplus_pwm_disable_duty_set_work;
+	struct workqueue_struct *oplus_pwm_switch_send_next_cmdq_wq;
+	struct work_struct oplus_pwm_switch_send_next_cmdq_work;
+	ktime_t ts_timestamp;
 	u32 last_us_per_frame;
 	u32 last_vsync_width;
 	u32 last_refresh_rate;
-	struct workqueue_struct *oplus_pwm_switch_send_next_cmdq_wq;
-	struct work_struct oplus_pwm_switch_send_next_cmdq_work;
+	u32 work_frame;
 #endif /* OPLUS_FEATURE_DISPLAY */
 
 #if defined(CONFIG_PXLW_IRIS)

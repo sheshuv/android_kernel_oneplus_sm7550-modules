@@ -21,7 +21,6 @@
 #include <linux/notifier.h>
 #include <linux/msm_drm_notify.h>
 #include <soc/oplus/device_info.h>
-#include "../../../../../sm8550/drivers/input/touchscreen/oplus_touchscreen_v2/touchpanel_notify/touchpanel_event_notify.h"
 #include "dsi_pwr.h"
 #include "oplus_display_panel.h"
 
@@ -40,7 +39,7 @@
 #if defined(CONFIG_PXLW_IRIS)
 #include "dsi_iris_api.h"
 #endif
-
+#include "oplus_display_panel_cabc.h"
 /* String length define */
 #define STR_SIZE 512
 
@@ -86,7 +85,7 @@ int dsi_cmd_panel_debug = 0;
 uint64_t serial_number_fir = 0x0;
 uint64_t serial_number_sec = 0x0;
 
-struct touchpanel_event fp_state = {0};
+int gamma_mode = 0;
 
 EXPORT_SYMBOL(oplus_dimlayer_bl_alpha);
 EXPORT_SYMBOL(oplus_dimlayer_bl_enable_real);
@@ -395,14 +394,14 @@ int dsi_display_read_panel_reg(struct dsi_display *display, u8 cmd, void *data,
 		return -EINVAL;
 	}
 
-	if(display->enabled == false) {
+	if(display->panel->panel_initialized == false) {
 		pr_info("%s primary display is disable, try sec display\n", __func__);
 		display = get_sec_display();
 		if (!display) {
 			pr_info("%s sec display is null\n", __func__);
 			return -1;
 		}
-		if (display->enabled == false) {
+		if (display->panel->panel_initialized == false) {
 			pr_info("%s second panel is disabled", __func__);
 			return -1;
 		}
@@ -410,7 +409,7 @@ int dsi_display_read_panel_reg(struct dsi_display *display, u8 cmd, void *data,
 
 	mutex_lock(&display->display_lock);
 	/* if (is_set_seed && (get_oplus_display_power_status() != OPLUS_DISPLAY_POWER_ON)) { */
-	if (display->panel->power_mode != SDE_MODE_DPMS_ON) {
+	if (display->panel->power_mode == SDE_MODE_DPMS_OFF) {
 		pr_err("%s:panel off\n", __func__);
 		goto done;
 	}
@@ -689,12 +688,12 @@ static ssize_t oplus_display_get_panel_serial_number(struct kobject *obj,
 		struct kobj_attribute *attr, char *buf)
 {
 	int ret = 0;
-	unsigned char read[30];
+	unsigned char read[30] = {0};
 	PANEL_SERIAL_INFO panel_serial_info;
 	uint64_t serial_number;
 	struct dsi_display_ctrl *m_ctrl = NULL;
 	struct dsi_display *display = get_main_display();
-	int i;
+	int i, j;
 	int panel_id = 0;
 
 	if (!display || !display->panel) {
@@ -763,8 +762,16 @@ static ssize_t oplus_display_get_panel_serial_number(struct kobject *obj,
 			return ret;
 		}
 
+		if (display->panel->oplus_ser.is_multi_reg) {
+			if (display->panel->oplus_ser.serial_number_conut < 7) {
+				LCD_ERR("Get panel sn invalid multi regs\n");
+				return -1;
+			}
+		}
+
 		if (!strcmp(display->panel->name, "AA536 P 3 A0001 dsc cmd mode panel") ||
-			!strcmp(display->panel->name, "AA551 P 3 A0004 dsc cmd mode panel")) {
+			!strcmp(display->panel->name, "AA551 P 3 A0004 dsc cmd mode panel") ||
+			!strcmp(display->panel->name, "AC147 P 7 A0012 dsc cmd mode panel")) {
 			LCD_INFO("skip set_page\n");
 		} else if (!strcmp(display->panel->name, "boe rm692e5 dsc cmd mode panel")) {
 			mutex_lock(&display->display_lock);
@@ -774,6 +781,16 @@ static ssize_t oplus_display_get_panel_serial_number(struct kobject *obj,
 			mutex_unlock(&display->display_lock);
 
 			if (ret) {
+				return -1;
+			}
+		} else if (display->panel->oplus_ser.is_switch_page) {
+			mutex_lock(&display->display_lock);
+			mutex_lock(&display->panel->panel_lock);
+			ret = dsi_panel_tx_cmd_set(display->panel, DSI_CMD_PANEL_DATE_SWITCH);
+			mutex_unlock(&display->panel->panel_lock);
+			mutex_unlock(&display->display_lock);
+			if (ret) {
+				LCD_ERR("get serial number switch page failed\n");
 				return -1;
 			}
 		} else if (!display->panel->oplus_ser.is_reg_lock) {
@@ -819,6 +836,31 @@ static ssize_t oplus_display_get_panel_serial_number(struct kobject *obj,
 
 			ret |= dsi_panel_read_panel_reg_unlock(m_ctrl, display->panel, display->panel->oplus_ser.serial_number_reg,
 				read, display->panel->oplus_ser.serial_number_conut);
+			mutex_unlock(&display->panel->panel_lock);
+			mutex_unlock(&display->display_lock);
+		} else if (display->panel->oplus_ser.is_multi_reg) {
+			mutex_lock(&display->display_lock);
+			mutex_lock(&display->panel->panel_lock);
+
+			if (display->panel->oplus_ser.is_switch_page) {
+				ret = dsi_panel_tx_cmd_set(display->panel, DSI_CMD_PANEL_DATE_SWITCH);
+				if (ret) {
+					LCD_ERR("get serial number switch page failed\n");
+					mutex_unlock(&display->panel->panel_lock);
+					mutex_unlock(&display->display_lock);
+					return -1;
+				}
+			}
+
+			for (j = 0; j < display->panel->oplus_ser.serial_number_conut; j++) {
+				ret = dsi_panel_read_panel_reg_unlock(m_ctrl, display->panel, display->panel->oplus_ser.serial_number_multi_regs[j],
+					&read[j], 1);
+				if (ret < 0) {
+					ret = sysfs_emit(buf, "Get panel serial number failed, reason:%d", ret);
+					msleep(20);
+					break;
+				}
+			}
 			mutex_unlock(&display->panel->panel_lock);
 			mutex_unlock(&display->display_lock);
 		} else {
@@ -1604,14 +1646,11 @@ static void oplus_display_print_cmd_desc(const struct dsi_panel_cmd_set *cmd_set
 		len += snprintf(buf, sizeof(buf) - len, "%02X ", msg.type);
 		len += snprintf(buf + len, sizeof(buf) - len, "%02X ", 0x00);
 		len += snprintf(buf + len, sizeof(buf) - len, "%02X ", msg.channel);
-		/* Batch Flag */
-		len += snprintf(buf + len, sizeof(buf) - len, "%02X ",
-				(msg.flags & MIPI_DSI_MSG_BATCH_COMMAND) ?
-				MIPI_DSI_MSG_BATCH_COMMAND : 0x00);
-		/* Delay */
+		len += snprintf(buf + len, sizeof(buf) - len, "%02X ", msg.flags);
 		len += snprintf(buf + len, sizeof(buf) - len, "%02X ", cmds->post_wait_ms);
 		len += snprintf(buf + len, sizeof(buf) - len, "%02X %02X",
 				msg.tx_len >> 8, msg.tx_len & 0xFF);
+
 		/* Packet Payload */
 		for (j = 0 ; j < msg.tx_len ; j++) {
 			len += snprintf(buf + len, sizeof(buf) - len, " %02X", tx_buf[j]);
@@ -2748,6 +2787,28 @@ static ssize_t oplus_display_get_ccd_check(struct kobject *obj,
 	return sysfs_emit(buf, "%d\n", ccd_check);
 }
 
+int oplus_display_panel_switch_gamma_mode(struct dsi_panel *panel, u32 bl_lvl)
+{
+	int rc = 0;
+
+	if (bl_lvl < 9 && bl_lvl > 0) {
+		gamma_mode = 1;
+		rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_BACKLIGHT_GAMMA_ENTER);
+		if (rc) {
+			pr_err("[%s] failed to send DSI_CMD_BACKLIGHT_GAMMA_ENTER cmds, rc=%d\n",
+				panel->name, rc);
+		}
+	} else if (bl_lvl > 8 && gamma_mode != 2) {
+		gamma_mode = 2;
+		rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_BACKLIGHT_GAMMA_EXIT);
+		if (rc) {
+			pr_err("[%s] failed to send DSI_CMD_BACKLIGHT_GAMMA_EXIT cmds, rc=%d\n",
+				panel->name, rc);
+		}
+	}
+	return rc;
+}
+
 int oplus_display_set_power(struct drm_connector *connector,
 		int power_mode, void *disp)
 {
@@ -3053,10 +3114,30 @@ static ssize_t oplus_display_set_trace_enable_attr(struct kobject *obj,
 	return count;
 }
 
-static ssize_t oplus_display_get_fp_state(struct kobject *obj,
+static ssize_t oplus_display_get_panel_cabc(struct kobject *obj,
 	struct kobj_attribute *attr, char *buf)
 {
-	return sprintf(buf, "%d,%d,%d\n", fp_state.x, fp_state.y, fp_state.touch_state);
+	uint32_t cabc_mode = 0;
+	oplus_display_panel_get_cabc(&cabc_mode);
+	pr_info("%s: cabc_mode=%d\n", __func__, cabc_mode);
+	return sprintf(buf, "%d\n", cabc_mode);
+}
+
+static ssize_t oplus_display_set_panel_cabc(struct kobject *obj,
+	struct kobj_attribute *attr, const char *buf, size_t count)
+{
+	uint32_t temp_save = 0;
+	int rc = 0;
+
+	sscanf(buf, "%du", &temp_save);
+	pr_info("%s: to set cabc_mode=%d\n", __func__, temp_save);
+	rc = oplus_display_panel_set_cabc(&temp_save);
+	if (rc) {
+		pr_err("%s: Not to config cabc_mode=%d", __func__, temp_save);
+		return -EINVAL;
+	}
+
+	return count;
 }
 
 static struct kobject *oplus_display_kobj;
@@ -3116,7 +3197,6 @@ static OPLUS_ATTR(panel_pwr, S_IRUGO | S_IWUSR, oplus_display_get_panel_pwr,
 		oplus_display_set_panel_pwr);
 static OPLUS_ATTR(dsi_log_switch, S_IRUGO | S_IWUSR, oplus_display_get_dsi_log_switch,
 		oplus_display_set_dsi_log_switch);
-static OPLUS_ATTR(fp_state, S_IRUGO, oplus_display_get_fp_state, NULL);
 static OPLUS_ATTR(trace_enable, S_IRUGO | S_IWUSR, oplus_display_get_trace_enable_attr, oplus_display_set_trace_enable_attr);
 static OPLUS_ATTR(backlight_smooth, S_IRUGO|S_IWUSR, oplus_backlight_smooth_get_debug,
 		oplus_backlight_smooth_set_debug);
@@ -3150,6 +3230,7 @@ static OPLUS_ATTR(dimlayer_hbm, S_IRUGO | S_IWUSR, oplus_ofp_get_dimlayer_hbm_at
 static OPLUS_ATTR(notify_fppress, S_IRUGO | S_IWUSR, NULL, oplus_ofp_notify_fp_press_attr);
 static OPLUS_ATTR(aod_light_mode_set, S_IRUGO | S_IWUSR, oplus_ofp_get_aod_light_mode_attr, oplus_ofp_set_aod_light_mode_attr);
 static OPLUS_ATTR(ultra_low_power_aod_mode, S_IRUGO | S_IWUSR, oplus_ofp_get_ultra_low_power_aod_mode_attr, oplus_ofp_set_ultra_low_power_aod_mode_attr);
+static OPLUS_ATTR(LCM_CABC, S_IRUGO|S_IWUSR, oplus_display_get_panel_cabc, oplus_display_set_panel_cabc);
 #endif /* OPLUS_FEATURE_DISPLAY_ONSCREENFINGERPRINT */
 
 /*
@@ -3206,7 +3287,6 @@ static struct attribute *oplus_display_attrs[] = {
 #endif /* OPLUS_FEATURE_DISPLAY_TEMP_COMPENSATION */
 #ifdef OPLUS_FEATURE_DISPLAY_ONSCREENFINGERPRINT
 	&oplus_attr_fp_type.attr,
-	&oplus_attr_fp_state.attr,
 	&oplus_attr_hbm.attr,
 	&oplus_attr_aor.attr,
 	&oplus_attr_dimlayer_hbm.attr,
@@ -3214,6 +3294,7 @@ static struct attribute *oplus_display_attrs[] = {
 	&oplus_attr_aod_light_mode_set.attr,
 	&oplus_attr_ultra_low_power_aod_mode.attr,
 #endif /* OPLUS_FEATURE_DISPLAY_ONSCREENFINGERPRINT */
+	&oplus_attr_LCM_CABC.attr,
 	NULL,	/* need to NULL terminate the list of attributes */
 };
 
@@ -3236,23 +3317,6 @@ int oplus_display_get_resolution(unsigned int *xres, unsigned int *yres)
 	return 0;
 }
 EXPORT_SYMBOL(oplus_display_get_resolution);
-
-static int oplus_input_event_notify(struct notifier_block *self, unsigned long action, void *data) {
-	struct touchpanel_event *event = (struct touchpanel_event*)data;
-
-	if (event && action == EVENT_ACTION_FOR_FINGPRINT) {
-		fp_state.x = event->x;
-		fp_state.y = event->y;
-		fp_state.touch_state = event->touch_state;
-		sysfs_notify(kernel_kobj, "oplus_display", oplus_attr_fp_state.attr.name);
-	}
-
-	return NOTIFY_DONE;
-}
-
-struct notifier_block oplus_input_event_notifier = {
-	.notifier_call = oplus_input_event_notify,
-};
 
 int oplus_display_private_api_init(void)
 {
@@ -3283,12 +3347,6 @@ int oplus_display_private_api_init(void)
 		goto error_remove_sysfs_group;
 	}
 
-	retval = touchpanel_event_register_notifier(&oplus_input_event_notifier);
-
-	if (retval) {
-		goto error_remove_sysfs_group;
-	}
-
 	return 0;
 
 error_remove_sysfs_group:
@@ -3302,7 +3360,6 @@ error_remove_kobj:
 
 void  oplus_display_private_api_exit(void)
 {
-	touchpanel_event_unregister_notifier(&oplus_input_event_notifier);
 	sysfs_remove_link(oplus_display_kobj, "panel");
 	sysfs_remove_group(oplus_display_kobj, &oplus_display_attr_group);
 	kobject_put(oplus_display_kobj);

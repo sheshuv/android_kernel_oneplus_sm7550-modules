@@ -17,6 +17,10 @@
 #include "kgsl_reclaim.h"
 #include "kgsl_sharedmem.h"
 
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_MM_OSVELTE)
+#include "mm_osvelte/common.h"
+#endif /* CONFIG_OPLUS_FEATURE_MM_OSVELTE */
+
 /*
  * The user can set this from debugfs to force failed memory allocations to
  * fail without trying OOM first.  This is a debug setting useful for
@@ -986,9 +990,6 @@ static void kgsl_contiguous_free(struct kgsl_memdesc *memdesc)
 	if (!memdesc->hostptr)
 		return;
 
-	if (memdesc->priv & KGSL_MEMDESC_MAPPED)
-		return;
-
 	atomic_long_sub(memdesc->size, &kgsl_driver.stats.coherent);
 
 	_kgsl_contiguous_free(memdesc);
@@ -1201,9 +1202,6 @@ static void kgsl_free_pages(struct kgsl_memdesc *memdesc)
 	kgsl_paged_unmap_kernel(memdesc);
 	WARN_ON(memdesc->hostptr);
 
-	if (memdesc->priv & KGSL_MEMDESC_MAPPED)
-		return;
-
 	atomic_long_sub(memdesc->size, &kgsl_driver.stats.page_alloc);
 
 	_kgsl_free_pages(memdesc, memdesc->page_count);
@@ -1221,9 +1219,6 @@ static void kgsl_free_system_pages(struct kgsl_memdesc *memdesc)
 
 	kgsl_paged_unmap_kernel(memdesc);
 	WARN_ON(memdesc->hostptr);
-
-	if (memdesc->priv & KGSL_MEMDESC_MAPPED)
-		return;
 
 	atomic_long_sub(memdesc->size, &kgsl_driver.stats.page_alloc);
 
@@ -1301,12 +1296,7 @@ static void kgsl_free_secure_system_pages(struct kgsl_memdesc *memdesc)
 {
 	int i;
 	struct scatterlist *sg;
-	int ret;
-
-	if (memdesc->priv & KGSL_MEMDESC_MAPPED)
-		return;
-
-	ret = kgsl_unlock_sgt(memdesc->sgt);
+	int ret = kgsl_unlock_sgt(memdesc->sgt);
 
 	if (ret) {
 		/*
@@ -1336,12 +1326,8 @@ static void kgsl_free_secure_system_pages(struct kgsl_memdesc *memdesc)
 
 static void kgsl_free_secure_pages(struct kgsl_memdesc *memdesc)
 {
-	int ret;
+	int ret = kgsl_unlock_sgt(memdesc->sgt);
 
-	if (memdesc->priv & KGSL_MEMDESC_MAPPED)
-		return;
-
-	ret = kgsl_unlock_sgt(memdesc->sgt);
 	if (ret) {
 		/*
 		 * Unlock of the secure buffer failed. This buffer will
@@ -1815,3 +1801,35 @@ void kgsl_free_globals(struct kgsl_device *device)
 		kfree(md);
 	}
 }
+
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_MM_OSVELTE)
+void dump_kgsl_process_mem_detail(struct kgsl_process_private *priv)
+{
+    int i = 0;
+    int id = 0;
+    struct kgsl_mem_entry *entry = NULL;
+    uint64_t memtype_detail[KGSL_MEMTYPE_KERNEL + 1] = {0};
+    spin_lock(&priv->mem_lock);
+    for (entry = idr_get_next(&priv->mem_idr, &id); entry;
+        id++, entry = idr_get_next(&priv->mem_idr, &id)) {
+        struct kgsl_memdesc *memdesc;
+        unsigned int type;
+        if (!kgsl_mem_entry_get(entry))
+            continue;
+        spin_unlock(&priv->mem_lock);
+        memdesc = &entry->memdesc;
+        type = kgsl_memdesc_get_memtype(memdesc);
+        if (type <= KGSL_MEMTYPE_KERNEL)
+            memtype_detail[type] += memdesc->size;
+        kgsl_mem_entry_put(entry);
+        spin_lock(&priv->mem_lock);
+    }
+    spin_unlock(&priv->mem_lock);
+    osvelte_info("%-16s %-5s \n", "memtype", "size");
+    for (i = 0; i <= KGSL_MEMTYPE_KERNEL; i++) {
+        if (memtype_detail[i] > 0) {
+            osvelte_info("%-16d %-5llu\n", i, memtype_detail[i] / SZ_1K);
+        }
+    }
+}
+#endif /* CONFIG_OPLUS_FEATURE_MM_OSVELTE */

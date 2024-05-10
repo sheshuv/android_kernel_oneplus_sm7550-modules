@@ -4026,8 +4026,6 @@ static int __wlan_hdd_cfg80211_stats_ext_request(struct wiphy *wiphy,
 		return -EPERM;
 	}
 
-	if (wlan_hdd_validate_vdev_id(adapter->vdev_id))
-		return -EINVAL;
 	/**
 	 * HTT_DBG_EXT_STATS_PDEV_RX
 	 */
@@ -6138,8 +6136,6 @@ wlan_hdd_refill_actual_rate(struct station_info *sinfo,
 	preamble = adapter->hdd_stats.class_a_stat.rx_preamble;
 
 	if (preamble == DOT11_A || preamble == DOT11_B) {
-		/* Clear rxrate which may have been set previously */
-		qdf_mem_zero(&sinfo->rxrate, sizeof(sinfo->rxrate));
 		sinfo->rxrate.legacy = adapter->hdd_stats.class_a_stat.rx_rate;
 		hdd_debug("Reporting legacy rate %d", sinfo->rxrate.legacy);
 		return;
@@ -6328,6 +6324,33 @@ static int wlan_hdd_get_sta_stats(struct wiphy *wiphy,
 
 	wlan_hdd_mlo_update_stats_info(adapter);
 	snr = adapter->snr;
+
+#ifdef OPLUS_FEATURE_WIFI_SIGNAL
+//Add for:Avoid upload invalid RSSI to upper layer when a new connection established.
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 14, 0))
+	{
+#define HW_VALID_RSSI_THRESHOLD (-90)
+		bool isValidRssi = true;
+		int i = 0;
+		if (adapter->rssi < HW_VALID_RSSI_THRESHOLD) {
+			for (i = 0; i < NUM_CHAINS_MAX; i++) {
+				if (adapter->hdd_stats.per_chain_rssi_stats.rssi[i] != WLAN_HDD_TGT_NOISE_FLOOR_DBM)
+					break;
+			}
+
+			if (i == NUM_CHAINS_MAX)
+				isValidRssi = false;
+		}
+
+		if (!isValidRssi) {
+			hdd_debug("get invalid RSSI from FW, use RSSI from scan result! HW combined RSSI=%d, Chain RSSI=%d.",
+				adapter->rssi, adapter->hdd_stats.per_chain_rssi_stats.rssi[0]);
+			adapter->rssi = 0;
+		}
+#undef HW_VALID_RSSI_THRESHOLD
+	}
+#endif
+#endif /* OPLUS_FEATURE_WIFI_SIGNAL */
 
 	/* for new connection there might be no valid previous RSSI */
 	if (!adapter->rssi) {
@@ -6625,6 +6648,12 @@ static int __wlan_hdd_cfg80211_get_station(struct wiphy *wiphy,
 		if (!adapter) {
 			adapter = WLAN_HDD_GET_PRIV_PTR(dev);
 			hdd_err_rl("the bssid is invalid");
+		} else if (hdd_adapter_is_link_adapter(adapter)) {
+			/* If the BSSID received is of the non-assoc link
+			 * fetch the ML adapter
+			 */
+			adapter =
+				hdd_adapter_get_mlo_adapter_from_link(adapter);
 		}
 		return wlan_hdd_get_sta_stats(wiphy, adapter, mac, sinfo);
 	}
@@ -7290,9 +7319,7 @@ QDF_STATUS wlan_hdd_get_mib_stats(struct hdd_adapter *adapter)
 		return ret;
 	}
 
-#ifdef WLAN_DEBUGFS
 	hdd_debugfs_process_mib_stats(adapter, stats);
-#endif
 
 	wlan_cfg80211_mc_cp_stats_free_stats_event(stats);
 	return ret;
@@ -7638,6 +7665,9 @@ void wlan_hdd_get_peer_rx_rate_stats(struct hdd_adapter *adapter)
 		return;
 	}
 
+	if (peer_stats->rx.preamble_info == DOT11_N)
+		peer_stats->rx.mcs_info +=
+			MAX_HT_MCS_IDX * (peer_stats->rx.nss_info - 1);
 	/*
 	 * The linkspeed calculated by driver is in kbps so we
 	 * convert it in units of 100 kbps expected by userspace

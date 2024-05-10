@@ -100,6 +100,21 @@ struct ctry_change_cbk_entry {
 	reg_ctry_change_callback cbk;
 };
 
+#ifdef CONFIG_REG_CLIENT
+#define MAX_INDOOR_LIST_SIZE 3
+
+/**
+ * struct indoor_concurrency_list - Active indoor station list
+ * @vdev_id: vdev ID
+ * @freq: frequency of the interface
+ * @chan_range: Range of channels based on bandwidth
+ */
+struct indoor_concurrency_list {
+	uint8_t vdev_id;
+	uint32_t freq;
+	const struct bonded_channel_freq *chan_range;
+};
+#endif
 /**
  * typedef reg_is_chan_connected_callback() - Regulatory callback to check if
  *                                            channel is connected
@@ -119,21 +134,6 @@ struct is_chan_connected_cbk_entry {
 	reg_is_chan_connected_callback cbk;
 };
 
-#ifdef CONFIG_REG_CLIENT
-#define MAX_INDOOR_LIST_SIZE 3
-
-/**
- * struct indoor_concurrency_list - Active indoor station list
- * @vdev_id: vdev ID
- * @freq: frequency of the interface
- * @chan_range: Range of channels based on bandwidth
- */
-struct indoor_concurrency_list {
-	uint8_t vdev_id;
-	uint32_t freq;
-	const struct bonded_channel_freq *chan_range;
-};
-#endif
 /**
  * struct wlan_regulatory_psoc_priv_obj - wlan regulatory psoc private object
  * @mas_chan_params: master channel parameters list

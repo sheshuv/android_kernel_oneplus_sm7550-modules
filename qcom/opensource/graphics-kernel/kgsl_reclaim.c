@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/kthread.h>
@@ -258,13 +258,6 @@ static u32 kgsl_reclaim_process(struct kgsl_process_private *process,
 			continue;
 		}
 
-		/* Do not reclaim pages mapped into a VBO */
-		if (atomic_read(&valid_entry->vbo_count)) {
-			kgsl_mem_entry_put(entry);
-			next++;
-			continue;
-		}
-
 		if ((atomic_read(&process->unpinned_page_count) +
 			memdesc->page_count) > kgsl_reclaim_max_page_limit) {
 			kgsl_mem_entry_put(entry);
@@ -397,7 +390,7 @@ void kgsl_reclaim_proc_private_init(struct kgsl_process_private *process)
 	atomic_set(&process->unpinned_page_count, 0);
 }
 
-int kgsl_reclaim_init(void)
+int kgsl_reclaim_start(void)
 {
 	int ret;
 
@@ -405,14 +398,27 @@ int kgsl_reclaim_init(void)
 	ret = register_shrinker(&kgsl_reclaim_shrinker);
 	if (ret)
 		pr_err("kgsl: reclaim: Failed to register shrinker\n");
-	else
-		INIT_WORK(&reclaim_work, kgsl_reclaim_background_work);
 
 	return ret;
+}
+
+int kgsl_reclaim_init(void)
+{
+	int ret = kgsl_reclaim_start();
+
+	if (ret)
+		return ret;
+
+	INIT_WORK(&reclaim_work, kgsl_reclaim_background_work);
+
+	return 0;
 }
 
 void kgsl_reclaim_close(void)
 {
 	/* Unregister shrinker */
 	unregister_shrinker(&kgsl_reclaim_shrinker);
+
+	cancel_work_sync(&reclaim_work);
 }
+

@@ -30,16 +30,17 @@ extern const char *cmd_set_prop_map[];
 extern int oplus_debug_max_brightness;
 bool is_evt_panel = false;
 bool is_dvt_0_panel = false;
+bool is_pvt_panel = false;
 bool is_gamma_panel = false;
+bool is_demura_panel = false;
 
 int oplus_panel_cmd_print(struct dsi_panel *panel, enum dsi_cmd_set_type type)
 {
 	switch (type) {
-	case DSI_CMD_READ_SAMSUNG_PANEL_REGISTER_ON:
 	case DSI_CMD_SET_ROI:
-	case DSI_CMD_READ_SAMSUNG_PANEL_REGISTER_OFF:
 	case DSI_CMD_ESD_SWITCH_PAGE:
 	case DSI_CMD_SKIPFRAME_DBV:
+	case DSI_CMD_DEFAULT_SWITCH_PAGE:
 #ifdef OPLUS_FEATURE_DISPLAY_ADFR_IGNORE
 	case DSI_CMD_ADFR_MIN_FPS_0:
 	case DSI_CMD_ADFR_MIN_FPS_1:
@@ -119,9 +120,16 @@ int oplus_panel_get_id(struct dsi_display *display, char *boot_str)
 				is_dvt_0_panel = true;
 				LCD_INFO("is_dvt_panel true\n");
 			}
+			if((0x3F == display->panel_id_da) && (0x07 <= display->panel_id_db)) {
+				is_pvt_panel = true;
+			}
 			if((0x07 == display->panel_id_db) && (0x00 == display->panel_id_dc)) {
 				is_gamma_panel = true;
 				LCD_INFO("is_gamma_panel true\n");
+			}
+			if((0x07 == display->panel_id_db) && (0x01 == display->panel_id_dc)) {
+				is_demura_panel = true;
+				LCD_INFO("is_demura_panel true\n");
 			}
 		} else {
 			LCD_INFO("fail to parse panel id\n");
@@ -217,6 +225,15 @@ int oplus_panel_cmd_switch(struct dsi_panel *panel, enum dsi_cmd_set_type *type)
 				break;
 			}
 		}
+		if (is_demura_panel) {
+			switch (*type) {
+			case DSI_CMD_SET_ON:
+				*type = DSI_CMD_SET_ON_DEMURA;
+				break;
+			default:
+				break;
+			}
+		}
 	}
 
 	count = panel->cur_mode->priv_info->cmd_sets[*type].count;
@@ -231,24 +248,22 @@ int oplus_panel_cmd_switch(struct dsi_panel *panel, enum dsi_cmd_set_type *type)
 	return 0;
 }
 
-void oplus_ctrl_print_cmd_desc(struct dsi_ctrl *dsi_ctrl, const struct mipi_dsi_msg *msg)
+void oplus_ctrl_print_cmd_desc(struct dsi_ctrl *dsi_ctrl, struct dsi_cmd_desc *cmd)
 {
 	char buf[512];
 	int len = 0;
 	size_t i;
+	const struct mipi_dsi_msg *msg = &cmd->msg;
 	char *tx_buf = (char*)msg->tx_buf;
 
 	memset(buf, 0, sizeof(buf));
 
 	/* Packet Info */
 	len += snprintf(buf, sizeof(buf) - len,  "%02X ", msg->type);
-	/* Last bit */
-	/* len += snprintf(buf + len, sizeof(buf) - len, "%02X ", (msg->flags & MIPI_DSI_MSG_LASTCOMMAND) ? 1 : 0); */
-	len += snprintf(buf + len, sizeof(buf) - len, "%02X ", (msg->flags) ? 1 : 0);
+	len += snprintf(buf + len, sizeof(buf) - len, "%02X ", 0x00);
 	len += snprintf(buf + len, sizeof(buf) - len, "%02X ", msg->channel);
 	len += snprintf(buf + len, sizeof(buf) - len, "%02X ", (unsigned int)msg->flags);
-	/* Delay */
-	/* len += snprintf(buf + len, sizeof(buf) - len, "%02X ", msg->wait_ms); */
+	len += snprintf(buf + len, sizeof(buf) - len, "%02X ", cmd->post_wait_ms);
 	len += snprintf(buf + len, sizeof(buf) - len, "%02X %02X ", msg->tx_len >> 8, msg->tx_len & 0x00FF);
 
 	/* Packet Payload */
@@ -258,7 +273,6 @@ void oplus_ctrl_print_cmd_desc(struct dsi_ctrl *dsi_ctrl, const struct mipi_dsi_
 		if (i > 160)
 			break;
 	}
-
 	/* DSI_CTRL_ERR(dsi_ctrl, "%s\n", buf); */
 	LCD_DEBUG_CMD("dsi_cmd: %s\n", buf);
 }
@@ -484,7 +498,9 @@ int oplus_panel_parse_vsync_config(
 		}
 	}
 
-	LCD_INFO("vsync width = %d, vsync period = %d\n", priv_info->vsync_width, priv_info->vsync_period);
+	priv_info->refresh_rate = mode->timing.refresh_rate;
+
+	LCD_INFO("vsync width = %d, vsync period = %d, refresh rate = %d\n", priv_info->vsync_width, priv_info->vsync_period, priv_info->refresh_rate);
 
 	return 0;
 }
@@ -958,8 +974,10 @@ int oplus_panel_pwm_switch_cmdq_delay_handle(void *dsi_panel, enum dsi_cmd_set_t
 			oplus_sde_early_wakeup(panel);
 			oplus_wait_for_vsync(panel);
 		}
-		if (panel->cur_mode->timing.refresh_rate == 60) {
+		if (panel->cur_mode->timing.refresh_rate == 60 || panel->cur_mode->timing.refresh_rate == 90) {
 			oplus_need_to_sync_te(panel);
+		} else if (panel->cur_mode->timing.refresh_rate == 120) {
+			usleep_range(1000, 1020);
 		}
 	}
 
@@ -996,8 +1014,10 @@ int oplus_panel_cmdq_pack_handle(void *dsi_panel, enum dsi_cmd_set_type type, bo
 					cmd_set_prop_map[type]);
 			oplus_sde_early_wakeup(panel);
 			oplus_wait_for_vsync(panel);
-			if (panel->cur_mode->timing.refresh_rate == 60) {
+			if (panel->cur_mode->timing.refresh_rate == 60 || panel->cur_mode->timing.refresh_rate == 90) {
 				oplus_need_to_sync_te(panel);
+			} else if (panel->cur_mode->timing.refresh_rate == 120) {
+				usleep_range(1000, 1020);
 			}
 		}
 	} else {

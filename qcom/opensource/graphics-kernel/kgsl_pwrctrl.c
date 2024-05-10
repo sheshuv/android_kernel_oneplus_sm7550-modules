@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2010-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2024, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/interconnect.h>
@@ -1370,17 +1370,14 @@ static int kgsl_pwrctrl_pwrrail(struct kgsl_device *device, bool state)
 	if (!state) {
 		if (test_and_clear_bit(KGSL_PWRFLAGS_POWER_ON,
 			&pwr->power_flags)) {
-			kgsl_mmu_send_tlb_hint(&device->mmu, true);
 			trace_kgsl_rail(device, state);
 			if (!kgsl_regulator_disable_wait(pwr->gx_gdsc, 200))
 				dev_err(device->dev, "Regulator vdd is stuck on\n");
 			if (!kgsl_regulator_disable_wait(pwr->cx_gdsc, 200))
 				dev_err(device->dev, "Regulator vddcx is stuck on\n");
 		}
-	} else {
+	} else
 		status = enable_regulators(device);
-		kgsl_mmu_send_tlb_hint(&device->mmu, false);
-	}
 
 	return status;
 }
@@ -1667,7 +1664,7 @@ void kgsl_idle_check(struct work_struct *work)
 			}
 			/* Don't allow GPU inline submission in SLUMBER */
 			if (requested_state == KGSL_STATE_SLUMBER)
-				device->slumber = true;
+				device->skip_inline_submit = true;
 			spin_unlock(&device->submit_lock);
 
 			ret = kgsl_pwrctrl_change_state(device,
@@ -1675,7 +1672,7 @@ void kgsl_idle_check(struct work_struct *work)
 			if (ret == -EBUSY) {
 				if (requested_state == KGSL_STATE_SLUMBER) {
 					spin_lock(&device->submit_lock);
-					device->slumber = false;
+					device->skip_inline_submit = false;
 					spin_unlock(&device->submit_lock);
 				}
 				/*
@@ -2159,10 +2156,10 @@ void kgsl_pwrctrl_set_state(struct kgsl_device *device,
 	device->requested_state = KGSL_STATE_NONE;
 
 	spin_lock(&device->submit_lock);
-	if (state == KGSL_STATE_SLUMBER || state == KGSL_STATE_SUSPEND)
-		device->slumber = true;
+	if (state == KGSL_STATE_ACTIVE)
+		device->skip_inline_submit = false;
 	else
-		device->slumber = false;
+		device->skip_inline_submit = true;
 	spin_unlock(&device->submit_lock);
 }
 

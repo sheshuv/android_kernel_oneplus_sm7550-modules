@@ -22,6 +22,22 @@
 #include "wcd938x-registers.h"
 #include "internal.h"
 
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_MM_FEEDBACK)
+#include "feedback/oplus_audio_kernel_fb.h"
+#ifdef dev_err_ratelimited
+#undef dev_err_ratelimited
+#define dev_err_ratelimited dev_err_ratelimited_fb
+#endif
+#ifdef pr_err_ratelimited
+#undef pr_err_ratelimited
+#define pr_err_ratelimited pr_err_ratelimited_fb
+#endif
+#ifdef pr_err
+#undef pr_err
+#define pr_err pr_err_fb_delay
+#endif
+#endif /* CONFIG_OPLUS_FEATURE_MM_FEEDBACK */
+
 #define WCD938X_ZDET_SUPPORTED          true
 /* Z value defined in milliohm */
 #define WCD938X_ZDET_VAL_32             32000
@@ -1104,8 +1120,12 @@ int wcd938x_mbhc_init(struct wcd938x_mbhc **mbhc,
 
 	pdata = dev_get_platdata(component->dev);
 	if (!pdata) {
+		#if IS_ENABLED(CONFIG_OPLUS_FEATURE_MM_FEEDBACK)
+		dev_err_fb_fatal_delay(component->dev, "%s: pdata pointer is NULL\n", __func__);
+		#else /* CONFIG_OPLUS_FEATURE_MM_FEEDBACK */
 		dev_err(component->dev, "%s: pdata pointer is NULL\n",
 			__func__);
+		#endif /* CONFIG_OPLUS_FEATURE_MM_FEEDBACK */
 		ret = -EINVAL;
 		goto err;
 	}
@@ -1148,8 +1168,12 @@ int wcd938x_mbhc_init(struct wcd938x_mbhc **mbhc,
 				WCD938X_ZDET_SUPPORTED);
 	#endif /* OPLUS_ARCH_EXTENDS */
 	if (ret) {
+		#if IS_ENABLED(CONFIG_OPLUS_FEATURE_MM_FEEDBACK)
+		dev_err_fb_fatal_delay(component->dev, "%s: mbhc initialization failed\n", __func__);
+		#else /* CONFIG_OPLUS_FEATURE_MM_FEEDBACK */
 		dev_err(component->dev, "%s: mbhc initialization failed\n",
 			__func__);
+		#endif /* CONFIG_OPLUS_FEATURE_MM_FEEDBACK */
 		goto err;
 	}
 

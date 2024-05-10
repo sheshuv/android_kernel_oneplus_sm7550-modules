@@ -1854,9 +1854,7 @@ static uint8_t hal_get_idle_link_bm_id_kiwi(uint8_t chip_id)
  */
 static inline uint8_t hal_get_first_wow_wakeup_packet_kiwi(uint8_t *buf)
 {
-	struct rx_pkt_tlvs *pkt_tlvs = (struct rx_pkt_tlvs *)buf;
-
-	return HAL_RX_TLV_FIRST_WAKEUP_PKT_GET(pkt_tlvs);
+	return 0;
 }
 #endif
 
@@ -1963,7 +1961,7 @@ hal_get_tsf_time_kiwi(hal_soc_handle_t hal_soc_hdl, uint32_t tsf_id,
 	uint64_t global_time_low_offset, global_time_high_offset;
 	uint64_t tsf_offset_low, tsf_offset_hi;
 	uint64_t fw_time, global_time, sync_time;
-	enum hal_scratch_reg_enum tsf_enum_low = 0, tsf_enum_high = 0;
+	enum hal_scratch_reg_enum tsf_enum_low, tsf_enum_high;
 
 	if (hif_force_wake_request(soc->hif_handle))
 		return;

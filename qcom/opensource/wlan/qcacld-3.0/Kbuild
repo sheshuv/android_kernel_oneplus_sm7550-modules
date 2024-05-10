@@ -6,9 +6,6 @@ else
 	KERNEL_BUILD := n
 endif
 
-# Force user build
-TARGET_BUILD_VARIANT := user
-
 ifeq ($(KERNEL_BUILD), y)
 	# These are provided in external module based builds
 	# Need to explicitly define for Kernel-based builds
@@ -173,6 +170,49 @@ HDD_OBJS := 	$(HDD_SRC_DIR)/wlan_hdd_assoc.o \
 		$(HDD_SRC_DIR)/wlan_hdd_tx_rx.o \
 		$(HDD_SRC_DIR)/wlan_hdd_wmm.o \
 		$(HDD_SRC_DIR)/wlan_hdd_wowl.o\
+
+#ifdef OPLUS_FEATURE_WIFI_MAC
+KBUILD_CPPFLAGS += -DOPLUS_FEATURE_WIFI_MAC
+#endif /* OPLUS_FEATURE_WIFI_MAC */
+
+#ifdef OPLUS_FEATURE_WIFI_SWITCH
+KBUILD_CPPFLAGS += -DOPLUS_CNSS_POWER_DEBUG
+#endif /* OPLUS_FEATURE_WIFI_SWITCH */
+
+#ifdef OPLUS_FEATURE_WIFI_DCS_SWITCH
+KBUILD_CPPFLAGS += -DOPLUS_FEATURE_WIFI_DCS_SWITCH
+#endif /* OPLUS_FEATURE_WIFI_DCS_SWITCH */
+
+#ifdef OPLUS_FEATURE_SOFTAP_DCS_SWITCH
+KBUILD_CPPFLAGS += -DOPLUS_FEATURE_SOFTAP_DCS_SWITCH
+#endif /* OPLUS_FEATURE_SOFTAP_DCS_SWITCH */
+
+#ifdef OPLUS_FEATURE_WIFI_SIGNAL
+KBUILD_CPPFLAGS += -DOPLUS_FEATURE_WIFI_SIGNAL
+#endif /* OPLUS_FEATURE_WIFI_SIGNAL */
+
+#ifdef OPLUS_FEATURE_CONN_POWER_MONITOR
+KBUILD_CPPFLAGS += -DOPLUS_FEATURE_CONN_POWER_MONITOR
+#endif /* OPLUS_FEATURE_CONN_POWER_MONITOR */
+
+KBUILD_CPPFLAGS += -DOPLUS_FEATURE_WIFI_OPLUSWFD_SMARTMCC
+HDD_OBJS +=	$(HDD_SRC_DIR)/wlan_oplus_smartmcc.o
+### End
+
+ifeq ($(CONFIG_OPLUS_FEATURE_WIFI_OPLUSWFD), y)
+KBUILD_CPPFLAGS += -DOPLUS_FEATURE_WIFI_OPLUSWFD
+HDD_OBJS +=	$(HDD_SRC_DIR)/wlan_oplus_wfd.o
+endif
+
+ifeq ($(CONFIG_OPLUS_FEATURE_WIFI_OPLUSWFD), m)
+KBUILD_CPPFLAGS += -DOPLUS_FEATURE_WIFI_OPLUSWFD
+HDD_OBJS +=	$(HDD_SRC_DIR)/wlan_oplus_wfd.o
+endif
+### End
+
+ifeq ($(CONFIG_WLAN_FEATURE_PERIODIC_STA_STATS), y)
+HDD_OBJS += $(HDD_SRC_DIR)/wlan_hdd_periodic_sta_stats.o
+endif
 
 ifeq ($(CONFIG_UNIT_TEST), y)
 HDD_OBJS += $(HDD_SRC_DIR)/wlan_hdd_unit_test.o
@@ -484,15 +524,6 @@ endif
 ifeq ($(CONFIG_FEATURE_DIRECT_LINK), y)
 HDD_OBJS += $(HDD_SRC_DIR)/wlan_hdd_sysfs_direct_link_ut_cmd.o
 endif
-
-ifeq ($(CONFIG_WLAN_SYSFS_BITRATES), y)
-HDD_OBJS += $(HDD_SRC_DIR)/wlan_hdd_sysfs_bitrates.o
-endif
-
-ifeq ($(CONFIG_WLAN_SYSFS_RF_TEST_MODE), y)
-HDD_OBJS += $(HDD_SRC_DIR)/wlan_hdd_sysfs_rf_test_mode.o
-endif
-
 endif # CONFIG_WLAN_SYSFS
 
 ifeq ($(CONFIG_QCACLD_FEATURE_FW_STATE), y)
@@ -3270,7 +3301,6 @@ INCS +=		$(COAP_WMI_INC)
 ccflags-y += $(INCS)
 
 cppflags-y +=	-DANI_OS_TYPE_ANDROID=6 \
-		-D__ANDROID_COMMON_KERNEL__ \
 		-Wall\
 		-Werror\
 		-D__linux__
@@ -3543,7 +3573,6 @@ cppflags-$(CONFIG_WIFI_MONITOR_SUPPORT) += -DWIFI_MONITOR_SUPPORT
 cppflags-$(CONFIG_QCA_MONITOR_PKT_SUPPORT) += -DQCA_MONITOR_PKT_SUPPORT
 cppflags-$(CONFIG_MONITOR_MODULARIZED_ENABLE) += -DMONITOR_MODULARIZED_ENABLE
 cppflags-$(CONFIG_DP_PKT_ADD_TIMESTAMP) += -DCONFIG_DP_PKT_ADD_TIMESTAMP
-ccflags-$(CONFIG_WLAN_SYSFS_RF_TEST_MODE) += -DFEATURE_SYSFS_RF_TEST_MODE
 
 ifeq ($(CONFIG_LEAK_DETECTION), y)
 cppflags-y += \
@@ -3686,7 +3715,6 @@ cppflags-$(CONFIG_FEATURE_BECN_STATS) += -DWLAN_FEATURE_BEACON_RECEPTION_STATS
 
 cppflags-$(CONFIG_WLAN_SYSFS_CONNECT_INFO) += -DWLAN_SYSFS_CONNECT_INFO
 cppflags-$(CONFIG_WLAN_SYSFS_EHT_RATE) += -DWLAN_SYSFS_EHT_RATE
-cppflags-$(CONFIG_WLAN_SYSFS_BITRATES) += -DWLAN_SYSFS_BITRATES
 
 #Set RX_PERFORMANCE
 cppflags-$(CONFIG_RX_PERFORMANCE) += -DRX_PERFORMANCE
@@ -4839,6 +4867,25 @@ endif
 # Android wifi state control interface
 ifneq ($(WLAN_CTRL_NAME),)
 ccflags-y += -DWLAN_CTRL_NAME=\"$(WLAN_CTRL_NAME)\"
+endif
+
+# inject some build related information
+ifeq ($(CONFIG_BUILD_TAG), y)
+CLD_CHECKOUT = $(shell cd "$(WLAN_ROOT)" && \
+	git reflog | grep -vm1 "}: cherry-pick: " | grep -oE ^[0-f]+)
+CLD_IDS = $(shell cd "$(WLAN_ROOT)" && \
+	git log -50 $(CLD_CHECKOUT)~..HEAD | \
+		sed -nE 's/^\s*Change-Id: (I[0-f]{10})[0-f]{30}\s*$$/\1/p' | \
+		paste -sd "," -)
+
+CMN_CHECKOUT = $(shell cd "$(WLAN_COMMON_INC)" && \
+	git reflog | grep -vm1 "}: cherry-pick: " | grep -oE ^[0-f]+)
+CMN_IDS = $(shell cd "$(WLAN_COMMON_INC)" && \
+	git log -50 $(CMN_CHECKOUT)~..HEAD | \
+		sed -nE 's/^\s*Change-Id: (I[0-f]{10})[0-f]{30}\s*$$/\1/p' | \
+		paste -sd "," -)
+BUILD_TAG = "cld:$(CLD_IDS); cmn:$(CMN_IDS); dev:$(DEVNAME)"
+ccflags-y += -DBUILD_TAG=\"$(BUILD_TAG)\"
 endif
 
 # Module information used by KBuild framework

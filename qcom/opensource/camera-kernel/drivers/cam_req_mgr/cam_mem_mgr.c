@@ -92,6 +92,7 @@ static void cam_mem_mgr_print_tbl(void)
 
 	CAM_GET_TIMESTAMP(current_ts);
 	CAM_CONVERT_TIMESTAMP_FORMAT(current_ts, hrs, min, sec, ms);
+
 	CAM_INFO(CAM_MEM, "***%llu:%llu:%llu:%llu Mem mgr table dump***",
 		hrs, min, sec, ms);
 	for (i = 1; i < CAM_MEM_BUFQ_MAX; i++) {
@@ -1693,6 +1694,7 @@ int cam_mem_mgr_release(struct cam_mem_mgr_release_cmd *cmd)
 	}
 
 	CAM_DBG(CAM_MEM, "Releasing hdl = %x, idx = %d", cmd->buf_handle, idx);
+
 	if (kref_put(&tbl.bufq[idx].krefcount, cam_mem_util_unmap)) {
 		CAM_DBG(CAM_MEM,
 			"Called unmap from here, buf_handle: %u, idx: %d",

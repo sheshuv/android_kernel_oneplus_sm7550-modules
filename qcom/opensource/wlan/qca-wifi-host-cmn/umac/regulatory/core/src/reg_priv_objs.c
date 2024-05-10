@@ -84,6 +84,7 @@ reg_set_5dot9_ghz_chan_in_master_mode(struct wlan_regulatory_psoc_priv_obj
 {
 	soc_reg_obj->enable_5dot9_ghz_chan_in_master_mode = false;
 }
+
 #else
 static void
 reg_set_5dot9_ghz_chan_in_master_mode(struct wlan_regulatory_psoc_priv_obj
@@ -91,6 +92,7 @@ reg_set_5dot9_ghz_chan_in_master_mode(struct wlan_regulatory_psoc_priv_obj
 {
 	soc_reg_obj->enable_5dot9_ghz_chan_in_master_mode = true;
 }
+
 #endif
 
 QDF_STATUS wlan_regulatory_psoc_obj_created_notification(

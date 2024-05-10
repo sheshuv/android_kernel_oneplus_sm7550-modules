@@ -2368,9 +2368,9 @@ int hif_pci_bus_suspend(struct hif_softc *scn)
 	}
 
 	/*
-	 * In an unlikely case, if draining becomes infinite loop,
-	 * it returns an error, shall abort the bus suspend.
-	 */
+	* In an unlikely case, if draining becomes infinite loop,
+	* it returns an error, shall abort the bus suspend.
+	*/
 	ret = hif_drain_fw_diag_ce(scn);
 	if (ret) {
 		hif_err("draining fw_diag_ce goes infinite, so abort suspend");

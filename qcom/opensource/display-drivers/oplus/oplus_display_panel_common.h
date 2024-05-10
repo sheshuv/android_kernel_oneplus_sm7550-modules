@@ -20,6 +20,7 @@
 #include "dsi_pwr.h"
 #include "sde_dbg.h"
 #include "oplus_display_private_api.h"
+#include "oplus_display_panel_cabc.h"
 
 #define PANEL_IOCTL_BUF_MAX 41
 #define PANEL_REG_MAX_LENS 28

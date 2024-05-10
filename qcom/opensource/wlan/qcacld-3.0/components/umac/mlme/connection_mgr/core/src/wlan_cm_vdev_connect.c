@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2012-2015, 2020-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2021-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -1107,9 +1107,8 @@ QDF_STATUS cm_flush_join_req(struct scheduler_msg *msg)
 }
 
 #ifdef WLAN_FEATURE_11BE_MLO
-QDF_STATUS
-cm_get_ml_partner_info(struct wlan_objmgr_pdev *pdev,
-		       struct scan_cache_entry *scan_entry,
+static  QDF_STATUS
+cm_get_ml_partner_info(struct scan_cache_entry *scan_entry,
 		       struct mlo_partner_info *partner_info)
 {
 	uint8_t i, j = 0;
@@ -1119,9 +1118,9 @@ cm_get_ml_partner_info(struct wlan_objmgr_pdev *pdev,
 	if (!scan_entry->ml_info.num_links)
 		return QDF_STATUS_E_FAILURE;
 
-	psoc = wlan_pdev_get_psoc(pdev);
+	psoc = wlan_objmgr_get_psoc_by_id(0, WLAN_MLME_CM_ID);
 	if (!psoc) {
-		mlme_err("psoc is NULL");
+		mlme_debug("psoc is NULL");
 		return QDF_STATUS_E_INVAL;
 	}
 	mlo_support_link_num = wlan_mlme_get_sta_mlo_conn_max_num(psoc);
@@ -1156,25 +1155,18 @@ cm_get_ml_partner_info(struct wlan_objmgr_pdev *pdev,
 		}
 	}
 	partner_info->num_partner_links = j;
-	mlme_debug("sta and ap intersect num of partner link: %d", j);
+	mlme_debug("sta and ap integrate link num: %d", j);
+
+	wlan_objmgr_psoc_release_ref(psoc, WLAN_MLME_CM_ID);
 
 	return QDF_STATUS_SUCCESS;
 }
 
-static void cm_fill_ml_info(struct wlan_objmgr_vdev *vdev,
-			    struct cm_vdev_join_req *join_req)
+static void cm_fill_ml_info(struct cm_vdev_join_req *join_req)
 {
 	QDF_STATUS ret;
-	struct wlan_objmgr_pdev *pdev;
 
-	pdev = wlan_vdev_get_pdev(vdev);
-	if (!pdev) {
-		mlme_err("Pdev is null. vdev_id:%d", wlan_vdev_get_id(vdev));
-		return;
-	}
-
-	ret = cm_get_ml_partner_info(pdev, join_req->entry,
-				     &join_req->partner_info);
+	ret = cm_get_ml_partner_info(join_req->entry, &join_req->partner_info);
 	if (QDF_IS_STATUS_SUCCESS(ret)) {
 		join_req->assoc_link_id = join_req->entry->ml_info.self_link_id;
 		mlme_debug("Assoc link ID:%d", join_req->assoc_link_id);
@@ -1189,8 +1181,7 @@ static void cm_copy_join_req_info_from_cm_connect_req(struct cm_vdev_join_req *j
 }
 
 #else
-static void cm_fill_ml_info(struct wlan_objmgr_vdev *vdev,
-			    struct cm_vdev_join_req *join_req)
+static void cm_fill_ml_info(struct cm_vdev_join_req *join_req)
 {
 }
 
@@ -1228,7 +1219,7 @@ cm_copy_join_params(struct wlan_objmgr_vdev *vdev,
 	if (wlan_vdev_mlme_is_mlo_link_vdev(vdev)) {
 		cm_copy_join_req_info_from_cm_connect_req(join_req, req);
 	} else {
-		cm_fill_ml_info(vdev, join_req);
+		cm_fill_ml_info(join_req);
 	}
 
 	if (req->owe_trans_ssid.length)
